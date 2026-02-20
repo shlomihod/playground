@@ -138,14 +138,15 @@ export function renderAugmentedPrompt(query, topK) {
   }).join('\n\n');
 
   promptEl.textContent =
-`System: Answer the question based on the provided context. If the context doesn't contain relevant information, say so.
+`# Instruction
+Answer the question based on the provided context.
+If the context doesn't contain relevant information, say so.
 
-Context:
+# Context
 ${context}
 
-Question: ${query}
-
-Answer:`;
+# Query
+${query}`;
 }
 
 /**
