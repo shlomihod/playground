@@ -25,14 +25,29 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - name: Install and build
-        working-directory: frontend
+
+      - name: Build RAG demo
+        working-directory: rag/frontend
         env:
           GITHUB_PAGES: "true"
         run: npm ci && npm run build
+
+      - name: Build ReAct demo
+        working-directory: react/frontend
+        env:
+          GITHUB_PAGES: "true"
+        run: npm ci && npm run build
+
+      - name: Assemble site
+        run: |
+          mkdir _site
+          cp index.html _site/
+          cp -r rag/frontend/dist _site/rag
+          cp -r react/frontend/dist _site/react
+
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: frontend/dist
+          path: _site
       - id: deployment
         uses: actions/deploy-pages@v4

@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Playground</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #0a0a1a;
+      --bg-card: #1a1a3a;
+      --text: #e0e0f0;
+      --text-dim: #8888aa;
+      --accent: #ffd700;
+      --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    }
+    html, body { height: 100%; background: var(--bg); color: var(--text); font-family: var(--font-sans); }
+    body { display: flex; align-items: center; justify-content: center; }
+    .hub { text-align: center; max-width: 600px; padding: 2rem; }
+    h1 { font-size: 2rem; margin-bottom: 0.5rem; color: var(--accent); }
+    .subtitle { color: var(--text-dim); margin-bottom: 2rem; }
+    .demos { display: flex; gap: 1.5rem; justify-content: center; flex-wrap: wrap; }
+    .demo-card {
+      background: var(--bg-card);
+      border: 1px solid #2a2a4a;
+      border-radius: 12px;
+      padding: 1.5rem 2rem;
+      text-decoration: none;
+      color: var(--text);
+      transition: border-color 0.2s, box-shadow 0.2s;
+      width: 200px;
+    }
+    .demo-card:hover { border-color: var(--accent); box-shadow: 0 0 20px rgba(255,215,0,0.15); }
+    .demo-card h2 { font-size: 1.2rem; margin-bottom: 0.4rem; color: var(--accent); }
+    .demo-card p { font-size: 0.85rem; color: var(--text-dim); line-height: 1.4; }
+  </style>
+</head>
+<body>
+  <div class="hub">
+    <h1>Playground</h1>
+    <p class="subtitle">Interactive demos for learning AI/ML concepts</p>
+    <div class="demos">
+      <a class="demo-card" href="rag/">
+        <h2>RAG</h2>
+        <p>Visualize retrieval-augmented generation in real time</p>
+      </a>
+      <a class="demo-card" href="react/">
+        <h2>ReAct</h2>
+        <p>Step through the reasoning + acting agent loop</p>
+      </a>
+    </div>
+  </div>
+</body>
+</html>

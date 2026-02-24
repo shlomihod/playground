@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ReAct Pattern Playground</title>
+</head>
+<body>
+  <div id="app">
+    <!-- Header -->
+    <header id="header">
+      <div class="header-left">
+        <h1>ReAct Pattern Playground</h1>
+      </div>
+      <div class="header-right">
+        <span id="step-counter">Step 0/17</span>
+        <button id="btn-prev" title="Previous step (←)">&#171; Prev</button>
+        <button id="btn-next" title="Next step (→)">Next &#187;</button>
+        <button id="btn-auto" title="Auto-play (Space)">Auto-play</button>
+        <button id="btn-reset" title="Reset (R)">Reset</button>
+      </div>
+    </header>
+
+    <!-- Diagram -->
+    <section id="diagram-section">
+      <svg id="diagram-svg" viewBox="0 0 900 170" preserveAspectRatio="xMidYMid meet">
+        <defs>
+          <marker id="arrow-head" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+            <polygon points="0 0, 8 3, 0 6" fill="var(--accent)" />
+          </marker>
+          <marker id="arrow-head-dim" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+            <polygon points="0 0, 8 3, 0 6" fill="#444466" />
+          </marker>
+        </defs>
+
+        <!-- User node -->
+        <rect class="node node-user" x="20" y="55" width="120" height="60" rx="10" />
+        <text class="node-label" x="80" y="90">User</text>
+
+        <!-- Orchestrator node -->
+        <rect class="node node-orch" x="250" y="55" width="160" height="60" rx="10" />
+        <text class="node-label" x="330" y="90">Orchestrator</text>
+
+        <!-- LLM node -->
+        <rect class="node node-llm" x="520" y="55" width="120" height="60" rx="10" />
+        <text class="node-label" x="580" y="90">LLM</text>
+
+        <!-- Tools node group -->
+        <rect class="node node-tools" x="720" y="10" width="160" height="150" rx="10" />
+        <text class="node-label" x="800" y="35">Tools</text>
+        <text class="tool-item" id="tool-calculator" x="740" y="62">&#x1F522; calculator</text>
+        <text class="tool-item" id="tool-search" x="740" y="88">&#x1F50D; search</text>
+        <text class="tool-item" id="tool-rag" x="740" y="114">&#x1F4DA; rag</text>
+        <text class="tool-item" id="tool-send_email" x="740" y="140">&#x1F4E7; send_email</text>
+
+        <!-- Arrows (hidden by default, activated per step) -->
+        <line class="arrow" id="arrow-user-orch" x1="140" y1="85" x2="248" y2="85" marker-end="url(#arrow-head)" />
+        <line class="arrow" id="arrow-orch-llm" x1="410" y1="85" x2="518" y2="85" marker-end="url(#arrow-head)" />
+        <line class="arrow" id="arrow-llm-orch" x1="518" y1="85" x2="410" y2="85" marker-end="url(#arrow-head)" />
+        <line class="arrow" id="arrow-orch-tools" x1="410" y1="85" x2="718" y2="85" marker-end="url(#arrow-head)" />
+        <line class="arrow" id="arrow-tools-orch" x1="718" y1="85" x2="410" y2="85" marker-end="url(#arrow-head)" />
+        <line class="arrow" id="arrow-orch-user" x1="248" y1="85" x2="140" y2="85" marker-end="url(#arrow-head)" />
+      </svg>
+    </section>
+
+    <!-- LLM Output panel -->
+    <section id="llm-output-section">
+      <h2>LLM Output</h2>
+      <div id="llm-output"></div>
+    </section>
+
+    <!-- Transcript + Insight side by side -->
+    <div id="bottom-row">
+      <section id="transcript-section">
+        <h2>Conversation Transcript</h2>
+        <div id="transcript"></div>
+      </section>
+      <section id="insight-section">
+        <div id="insight"></div>
+      </section>
+    </div>
+  </div>
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
