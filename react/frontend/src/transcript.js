@@ -1,15 +1,16 @@
 /**
- * transcript.js — Growing conversation log panel.
+ * transcript.js — Chat transcript log with streaming + highlight of new entries.
+ *
+ * Only 4 roles: System, User, Assistant, Tool: <name>
  */
 
 const ROLE_COLORS = {
-  'User':           '#66bbff',
-  'LLM':            '#ffd700',
-  'Observation':    '#51cf66',
-  'Assistant':      '#66bbff',
+  'System':    '#e8e8ff',
+  'User':      '#66bbff',
+  'Assistant': '#ffd700',
 };
 
-const TOOL_COLOR = '#ff6b6b';
+const TOOL_ROLE_COLOR = '#ff6b6b';
 
 let transcriptEl;
 
@@ -17,31 +18,123 @@ export function initTranscript() {
   transcriptEl = document.getElementById('transcript');
 }
 
-export function appendTranscript(role, text) {
+/**
+ * Append a complete transcript entry (or array of entries for the first step).
+ * @param {boolean} dim — if true, entry appears without highlight (replaying old steps)
+ */
+export function appendTranscript(role, text, dim) {
   if (!transcriptEl) return;
 
-  const entry = document.createElement('div');
-  entry.className = 'transcript-entry';
+  // Dim all previous entries
+  if (!dim) {
+    transcriptEl.querySelectorAll('.transcript-entry').forEach(e => {
+      e.classList.remove('new');
+    });
+  }
 
-  const roleSpan = document.createElement('span');
-  roleSpan.className = 'transcript-role';
-  const color = role.startsWith('Tool:') ? TOOL_COLOR : (ROLE_COLORS[role] || '#8888aa');
-  roleSpan.style.color = color;
-  roleSpan.textContent = `[${role}]`;
+  const entry = createEntry(role);
+  const textSpan = entry.querySelector('.transcript-text');
 
-  const textSpan = document.createElement('span');
-  textSpan.className = 'transcript-text';
-  textSpan.textContent = ` ${text}`;
+  if (role === 'Assistant') {
+    textSpan.innerHTML = highlightAssistantText(text);
+  } else if (role.startsWith('Tool:')) {
+    textSpan.innerHTML = `<span class="hl-json">${esc(text)}</span>`;
+  } else {
+    textSpan.textContent = text;
+  }
 
-  entry.appendChild(roleSpan);
-  entry.appendChild(textSpan);
+  if (!dim) entry.classList.add('new');
+  transcriptEl.appendChild(entry);
+  transcriptEl.scrollTop = transcriptEl.scrollHeight;
+  return entry;
+}
+
+/**
+ * Stream a transcript entry char-by-char. Returns interval ID.
+ */
+export function streamTranscriptEntry(role, text, charsPerSec, onDone) {
+  if (!transcriptEl) return null;
+
+  // Dim all previous entries
+  transcriptEl.querySelectorAll('.transcript-entry').forEach(e => {
+    e.classList.remove('new');
+  });
+
+  const entry = createEntry(role);
+  entry.classList.add('new');
+  const textSpan = entry.querySelector('.transcript-text');
   transcriptEl.appendChild(entry);
 
-  // Auto-scroll to bottom
-  transcriptEl.scrollTop = transcriptEl.scrollHeight;
+  let idx = 0;
+  const interval = 1000 / charsPerSec;
+
+  const timer = setInterval(() => {
+    idx++;
+    const partial = text.slice(0, idx);
+    textSpan.innerHTML = highlightAssistantText(partial);
+    transcriptEl.scrollTop = transcriptEl.scrollHeight;
+
+    if (idx >= text.length) {
+      clearInterval(timer);
+      if (onDone) onDone();
+    }
+  }, interval);
+
+  return timer;
+}
+
+export function getLastEntry() {
+  if (!transcriptEl) return null;
+  return transcriptEl.querySelector('.transcript-entry:last-child');
 }
 
 export function clearTranscript() {
   if (!transcriptEl) return;
   transcriptEl.innerHTML = '';
+}
+
+// ─── Internal ────────────────────────────────────────────────────
+
+function createEntry(role) {
+  const entry = document.createElement('div');
+  entry.className = 'transcript-entry';
+
+  const roleSpan = document.createElement('span');
+  roleSpan.className = 'transcript-role';
+
+  // Color: Tool: <name> roles get red, others from map
+  let color;
+  if (role.startsWith('Tool:')) {
+    color = TOOL_ROLE_COLOR;
+  } else {
+    color = ROLE_COLORS[role] || '#8888aa';
+  }
+  roleSpan.style.color = color;
+  roleSpan.textContent = `[${role}]`;
+
+  const textSpan = document.createElement('span');
+  textSpan.className = 'transcript-text';
+
+  entry.appendChild(roleSpan);
+  entry.appendChild(textSpan);
+  return entry;
+}
+
+/**
+ * Syntax-highlight Assistant text:
+ * - Lines from tool_call: onward get .hl-tool-call
+ * - Everything before is plain reasoning text
+ */
+export function highlightAssistantText(text) {
+  const lines = text.split('\n');
+  let inToolCall = false;
+  return lines.map(line => {
+    if (line.startsWith('tool_call:')) inToolCall = true;
+    if (inToolCall) return `<span class="hl-tool-call">${esc(line)}</span>`;
+    return esc(line);
+  }).join('\n');
+}
+
+function esc(s) {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }

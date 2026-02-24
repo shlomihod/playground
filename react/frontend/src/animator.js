@@ -3,9 +3,8 @@
  */
 
 import { STEPS } from './scenario.js';
-import { showArrows, highlightNodes, highlightTool, resetDiagram } from './diagram.js';
-import { appendTranscript, clearTranscript } from './transcript.js';
-import { renderLLMOutput, clearLLMOutput, streamLLMOutput } from './parser-highlight.js';
+import { showArrows, highlightNodes, highlightTool, resetDiagram, showToolActivity, clearToolActivity } from './diagram.js';
+import { appendTranscript, clearTranscript, streamTranscriptEntry, getLastEntry, highlightAssistantText } from './transcript.js';
 
 let currentStep = -1;
 let streamingTimer = null;
@@ -13,11 +12,10 @@ let autoplayTimer = null;
 let isAutoPlaying = false;
 
 const STREAM_CHARS_PER_SEC = 55;
-const AUTOPLAY_DELAY_MS = 2000;
+const AUTOPLAY_DELAY_MS = 1800;
 
 export function getCurrentStep() { return currentStep; }
 export function getTotalSteps() { return STEPS.length; }
-export function getIsAutoPlaying() { return isAutoPlaying; }
 
 export function init() {
   updateUI();
@@ -30,43 +28,40 @@ export function goToStep(n) {
   if (n < 0) n = -1;
   if (n >= STEPS.length) n = STEPS.length - 1;
 
-  // Rebuild state by replaying from start
+  // Rebuild by replaying from start
   currentStep = -1;
   clearTranscript();
-  clearLLMOutput();
+  clearToolActivity();
   resetDiagram();
 
   for (let i = 0; i <= n; i++) {
     currentStep = i;
     const step = STEPS[i];
 
-    // Apply diagram state
     resetDiagram();
     showArrows(step.arrows || []);
     highlightNodes(step.highlightNodes || []);
     if (step.highlightTool) highlightTool(step.highlightTool);
+    if (step.toolActivity) showToolActivity(step.toolActivity);
 
-    // Append transcript (don't stream — instant replay)
-    if (step.transcript) {
-      appendTranscript(step.transcript.role, step.transcript.text);
-    }
+    appendStepTranscript(step, i < n);
+  }
 
-    // Show LLM text instantly for replayed steps (stream only the last)
-    if (step.llmText) {
-      if (i < n) {
-        renderLLMOutput(step.llmText);
-      } else {
-        // Last step — stream it
-        streamLLMText(step.llmText);
-      }
-    } else if (i === n) {
-      clearLLMOutput();
+  // Stream only the very last step if it's a stream step
+  if (n >= 0) {
+    const last = STEPS[n];
+    if (last.transcript && !Array.isArray(last.transcript) && last.transcript.stream) {
+      // Remove the instant entry we just added and re-stream it
+      const lastEntry = getLastEntry();
+      if (lastEntry) lastEntry.remove();
+      streamIntoTranscript(last.transcript.role, last.transcript.text);
     }
   }
 
   if (n < 0) {
     currentStep = -1;
     resetDiagram();
+    clearToolActivity();
   }
 
   updateUI();
@@ -83,15 +78,16 @@ export function next() {
   showArrows(step.arrows || []);
   highlightNodes(step.highlightNodes || []);
   if (step.highlightTool) highlightTool(step.highlightTool);
+  if (step.toolActivity) showToolActivity(step.toolActivity);
 
   if (step.transcript) {
-    appendTranscript(step.transcript.role, step.transcript.text);
-  }
-
-  if (step.llmText) {
-    streamLLMText(step.llmText);
-  } else {
-    clearLLMOutput();
+    if (Array.isArray(step.transcript)) {
+      step.transcript.forEach(t => appendTranscript(t.role, t.text, false));
+    } else if (step.transcript.stream) {
+      streamIntoTranscript(step.transcript.role, step.transcript.text);
+    } else {
+      appendTranscript(step.transcript.role, step.transcript.text, false);
+    }
   }
 
   updateUI();
@@ -125,8 +121,9 @@ function autoStep() {
   next();
 
   const step = STEPS[currentStep];
-  const delay = step.llmText
-    ? (step.llmText.length / STREAM_CHARS_PER_SEC) * 1000 + 800
+  const t = step.transcript;
+  const delay = (t && !Array.isArray(t) && t.stream)
+    ? (t.text.length / STREAM_CHARS_PER_SEC) * 1000 + 600
     : AUTOPLAY_DELAY_MS;
 
   autoplayTimer = setTimeout(autoStep, delay);
@@ -139,9 +136,9 @@ function cancelAutoplay() {
   updateUI();
 }
 
-function streamLLMText(text) {
+function streamIntoTranscript(role, text) {
   cancelStream();
-  streamingTimer = streamLLMOutput(text, STREAM_CHARS_PER_SEC, () => {
+  streamingTimer = streamTranscriptEntry(role, text, STREAM_CHARS_PER_SEC, () => {
     streamingTimer = null;
   });
 }
@@ -150,10 +147,31 @@ function cancelStream() {
   if (streamingTimer !== null) {
     clearInterval(streamingTimer);
     streamingTimer = null;
-    // Show the full text of the current step
-    if (currentStep >= 0 && STEPS[currentStep].llmText) {
-      renderLLMOutput(STEPS[currentStep].llmText);
+    // Complete the last streaming entry instantly
+    const step = currentStep >= 0 ? STEPS[currentStep] : null;
+    const t = step?.transcript;
+    if (t && !Array.isArray(t) && t.stream) {
+      const lastEntry = getLastEntry();
+      if (lastEntry) {
+        const textEl = lastEntry.querySelector('.transcript-text');
+        if (textEl) {
+          textEl.innerHTML = highlightAssistantText(t.text);
+        }
+      }
     }
+  }
+}
+
+/**
+ * Append transcript entries for a step during replay.
+ * Handles both single objects and arrays of entries.
+ */
+function appendStepTranscript(step, dim) {
+  if (!step.transcript) return;
+  if (Array.isArray(step.transcript)) {
+    step.transcript.forEach(t => appendTranscript(t.role, t.text, dim));
+  } else {
+    appendTranscript(step.transcript.role, step.transcript.text, dim);
   }
 }
 
@@ -162,27 +180,10 @@ function updateUI() {
   const btnPrev = document.getElementById('btn-prev');
   const btnNext = document.getElementById('btn-next');
   const btnAuto = document.getElementById('btn-auto');
-  const insight = document.getElementById('insight');
 
   counter.textContent = `Step ${currentStep + 1}/${STEPS.length}`;
   btnPrev.disabled = currentStep <= -1;
   btnNext.disabled = currentStep >= STEPS.length - 1;
   btnAuto.textContent = isAutoPlaying ? 'Pause' : 'Auto-play';
   btnAuto.classList.toggle('active', isAutoPlaying);
-
-  if (currentStep >= 0 && STEPS[currentStep].insight) {
-    insight.innerHTML = formatInsight(STEPS[currentStep].insight);
-    insight.classList.remove('empty');
-  } else {
-    insight.innerHTML = '<p class="insight-placeholder">Click <strong>Next</strong> or press <strong>→</strong> to begin the walkthrough.</p>';
-    insight.classList.add('empty');
-  }
-}
-
-function formatInsight(text) {
-  // Simple markdown-like bold + code
-  const escaped = text
-    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-    .replace(/`(.+?)`/g, '<code>$1</code>');
-  return `<p class="insight-text">\u{1F4A1} ${escaped}</p>`;
 }
