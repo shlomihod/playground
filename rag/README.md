@@ -2,7 +2,7 @@
 
 An interactive visualization of how Retrieval-Augmented Generation (RAG) works. Type a query and watch in real-time as it gets embedded, compared against a knowledge base, and matched to the most relevant chunks — all running locally in the browser.
 
-**[Live Demo](https://shlomihod.github.io/rag-playground/)**
+**[Live Demo](https://shlomihod.github.io/playground/rag/)**
 
 ## How It Works
 
