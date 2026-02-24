@@ -262,6 +262,7 @@ html, body {
 }
 
 /* Syntax highlighting for chat transcript */
+.hl-thinking  { color: #88aaff; }
 .hl-tool-call { color: var(--accent); font-weight: 700; }
 .hl-json      { color: var(--success-color); }
 

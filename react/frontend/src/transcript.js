@@ -122,8 +122,9 @@ function createEntry(role) {
 
 /**
  * Syntax-highlight Assistant text:
+ * - Lines starting with thinking: get .hl-thinking
  * - Lines from tool_call: onward get .hl-tool-call
- * - Everything before is plain reasoning text
+ * - Everything else is plain text
  */
 export function highlightAssistantText(text) {
   const lines = text.split('\n');
@@ -131,6 +132,7 @@ export function highlightAssistantText(text) {
   return lines.map(line => {
     if (line.startsWith('tool_call:')) inToolCall = true;
     if (inToolCall) return `<span class="hl-tool-call">${esc(line)}</span>`;
+    if (line.startsWith('thinking:')) return `<span class="hl-thinking">${esc(line)}</span>`;
     return esc(line);
   }).join('\n');
 }

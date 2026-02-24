@@ -44,7 +44,7 @@ export const STEPS = [
     highlightNodes: ['llm'],
     transcript: {
       role: 'Assistant',
-      text: 'The user wants a 20% tip on $85. I should calculate that first.\n\ntool_call: { "tool": "calculator", "input": { "expression": "85 * 0.20" } }',
+      text: 'thinking: The user wants a 20% tip on $85. I should calculate that first.\n\ntool_call: { "tool": "calculator", "input": { "expression": "85 * 0.20" } }',
       stream: true,
     },
   },
@@ -88,7 +88,7 @@ export const STEPS = [
     highlightNodes: ['llm'],
     transcript: {
       role: 'Assistant',
-      text: 'Good, 20% tip on $85 is $17.00. Now I need to find the best dessert spot near NYC.\n\ntool_call: { "tool": "search", "input": { "query": "best dessert spot NYC" } }',
+      text: 'thinking: Good, 20% tip on $85 is $17.00. Now I need to find the best dessert spot near NYC.\n\ntool_call: { "tool": "search", "input": { "query": "best dessert spot NYC" } }',
       stream: true,
     },
   },
@@ -132,7 +132,7 @@ export const STEPS = [
     highlightNodes: ['llm'],
     transcript: {
       role: 'Assistant',
-      text: 'I should check Alice\'s notes for any dining preferences before sending the email.\n\ntool_call: { "tool": "rag", "input": { "query": "Alice dining preferences NYC" } }',
+      text: 'thinking: I should check Alice\'s notes for any dining preferences before sending the email.\n\ntool_call: { "tool": "rag", "input": { "query": "Alice dining preferences NYC" } }',
       stream: true,
     },
   },
@@ -177,7 +177,7 @@ export const STEPS = [
     highlightNodes: ['llm'],
     transcript: {
       role: 'Assistant',
-      text: 'I have the tip ($17), dessert spots, and Alice\'s preferences from her notes. Time to send the summary email.\n\ntool_call: {\n  "tool": "send_email",\n  "input": {\n    "to": "alice@example.com",\n    "subject": "NYC Dinner Summary",\n    "body": "Hi Alice! Here\'s your dinner summary:\\n\\n\u2022 20% tip on $85 = $17.00 (your usual default)\\n\u2022 Top dessert spots: Levain Bakery (cookies), Magnolia (pudding), Veniero\'s (pastries)\\n\u2022 Heads up: Levain uses peanut butter in some cookies \u2014 check before ordering!\\n\\nEnjoy!"\n  }\n}',
+      text: 'thinking: I have the tip ($17), dessert spots, and Alice\'s preferences from her notes. Time to send the summary email.\n\ntool_call: {\n  "tool": "send_email",\n  "input": {\n    "to": "alice@example.com",\n    "subject": "NYC Dinner Summary",\n    "body": "Hi Alice! Here\'s your dinner summary:\\n\\n\u2022 20% tip on $85 = $17.00 (your usual default)\\n\u2022 Top dessert spots: Levain Bakery (cookies), Magnolia (pudding), Veniero\'s (pastries)\\n\u2022 Heads up: Levain uses peanut butter in some cookies \u2014 check before ordering!\\n\\nEnjoy!"\n  }\n}',
       stream: true,
     },
   },
