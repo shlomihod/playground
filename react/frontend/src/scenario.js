@@ -9,7 +9,7 @@
  *   toolActivity   — array of { text, className? } for SVG lines next to tools
  *   insight        — (unused, kept for potential tooltip later)
  *
- * Chat Transcript shows only 4 roles: System, User, Assistant, Tool: <name>
+ * Chat Transcript shows only 4 roles: System, User, Assistant, Tool
  * Orchestration mechanics are visible only via diagram animation.
  */
 
@@ -67,7 +67,7 @@ export const STEPS = [
     arrows: ['arrow-tools-orch'],
     highlightNodes: ['tools', 'orch'],
     highlightTool: 'calculator',
-    transcript: { role: 'Tool: calculator', text: '{ "result": "17.0" }' },
+    transcript: { role: 'Tool', text: '{ "name": "calculator", "result": "17.0" }' },
     toolActivity: [
       { text: '\u{1F522} calculator', className: 'ta-name' },
       { text: 'Input: 85 * 0.20', className: 'ta-input' },
@@ -111,7 +111,7 @@ export const STEPS = [
     arrows: ['arrow-tools-orch'],
     highlightNodes: ['tools', 'orch'],
     highlightTool: 'search',
-    transcript: { role: 'Tool: search', text: '{ "results": [\n  "Levain Bakery \u2014 famous for gooey chocolate chip cookies, 167 W 74th St",\n  "Magnolia Bakery \u2014 classic banana pudding & cupcakes, 401 Bleecker St",\n  "Veniero\'s \u2014 Italian pastries since 1894, 342 E 11th St"\n] }' },
+    transcript: { role: 'Tool', text: '{ "name": "search", "results": [\n  "Levain Bakery \u2014 famous for gooey chocolate chip cookies, 167 W 74th St",\n  "Magnolia Bakery \u2014 classic banana pudding & cupcakes, 401 Bleecker St",\n  "Veniero\'s \u2014 Italian pastries since 1894, 342 E 11th St"\n] }' },
     toolActivity: [
       { text: '\u{1F50D} search', className: 'ta-name' },
       { text: 'Query: best dessert spot NYC', className: 'ta-input' },
@@ -156,7 +156,7 @@ export const STEPS = [
     arrows: ['arrow-tools-orch'],
     highlightNodes: ['tools', 'orch'],
     highlightTool: 'rag',
-    transcript: { role: 'Tool: rag', text: '{ "chunks": [\n  "Alice prefers 20% tip as default. Always tips in cash when possible.",\n  "Alice\'s favorite NYC dessert: chocolate lava cake. Allergic to peanuts."\n] }' },
+    transcript: { role: 'Tool', text: '{ "name": "rag", "chunks": [\n  "Alice prefers 20% tip as default. Always tips in cash when possible.",\n  "Alice\'s favorite NYC dessert: chocolate lava cake. Allergic to peanuts."\n] }' },
     toolActivity: [
       { text: '\u{1F4DA} rag', className: 'ta-name' },
       { text: 'Query: Alice dining preferences', className: 'ta-input' },
@@ -201,7 +201,7 @@ export const STEPS = [
     arrows: ['arrow-tools-orch'],
     highlightNodes: ['tools', 'orch'],
     highlightTool: 'send_email',
-    transcript: { role: 'Tool: send_email', text: '{ "result": "Email sent successfully to alice@example.com" }' },
+    transcript: { role: 'Tool', text: '{ "name": "send_email", "result": "Email sent successfully to alice@example.com" }' },
     toolActivity: [
       { text: '\u{1F4E7} send_email', className: 'ta-name' },
       { text: 'To: alice@example.com', className: 'ta-input' },

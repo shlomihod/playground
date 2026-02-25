@@ -1,16 +1,15 @@
 /**
  * transcript.js — Chat transcript log with streaming + highlight of new entries.
  *
- * Only 4 roles: System, User, Assistant, Tool: <name>
+ * Only 4 roles: System, User, Assistant, Tool
  */
 
 const ROLE_COLORS = {
   'System':    '#e8e8ff',
   'User':      '#66bbff',
   'Assistant': '#ffd700',
+  'Tool':      '#ff6b6b',
 };
-
-const TOOL_ROLE_COLOR = '#ff6b6b';
 
 let transcriptEl;
 
@@ -37,7 +36,7 @@ export function appendTranscript(role, text, dim) {
 
   if (role === 'Assistant') {
     textSpan.innerHTML = highlightAssistantText(text);
-  } else if (role.startsWith('Tool:')) {
+  } else if (role === 'Tool') {
     textSpan.innerHTML = `<span class="hl-json">${esc(text)}</span>`;
   } else {
     textSpan.textContent = text;
@@ -102,14 +101,7 @@ function createEntry(role) {
   const roleSpan = document.createElement('span');
   roleSpan.className = 'transcript-role';
 
-  // Color: Tool: <name> roles get red, others from map
-  let color;
-  if (role.startsWith('Tool:')) {
-    color = TOOL_ROLE_COLOR;
-  } else {
-    color = ROLE_COLORS[role] || '#8888aa';
-  }
-  roleSpan.style.color = color;
+  roleSpan.style.color = ROLE_COLORS[role] || '#8888aa';
   roleSpan.textContent = `[${role}]`;
 
   const textSpan = document.createElement('span');
