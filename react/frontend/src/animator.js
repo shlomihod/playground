@@ -107,11 +107,10 @@ export function next() {
     }
   }
 
-  // User view: show user message at step 0, final answer at delivery
+  // User view: show user message at step 0, final answer only at last step (delivery)
   if (currentStep === 0) {
     showUserMessage();
-  } else if (currentStep >= FINAL_ANSWER_STEP) {
-    // Show final answer (replace thinking dots)
+  } else if (currentStep === STEPS.length - 1) {
     clearUserView();
     showUserMessage();
     const finalText = STEPS[FINAL_ANSWER_STEP].transcript.text;
@@ -212,7 +211,7 @@ function rebuildUserView(stepIdx) {
   // Once past step 0, user message is always visible
   showUserMessage();
 
-  if (stepIdx >= FINAL_ANSWER_STEP) {
+  if (stepIdx >= STEPS.length - 1) {
     const finalText = STEPS[FINAL_ANSWER_STEP].transcript.text;
     showAssistantMessage(finalText);
   }
