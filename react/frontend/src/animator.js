@@ -5,6 +5,7 @@
 import { STEPS } from './scenario.js';
 import { showArrows, highlightNodes, highlightTool, resetDiagram, showToolActivity, clearToolActivity } from './diagram.js';
 import { appendTranscript, clearTranscript, streamTranscriptEntry, getLastEntry, highlightAssistantText } from './transcript.js';
+import { showUserMessage, showAssistantMessage, clearUserView } from './user-view.js';
 
 let currentStep = -1;
 let streamingTimer = null;
@@ -13,6 +14,18 @@ let isAutoPlaying = false;
 
 const STREAM_CHARS_PER_SEC = 55;
 const AUTOPLAY_DELAY_MS = 1800;
+
+// Find the step index where the user's query first appears (step 0)
+// and the step with the final assistant answer (last Assistant without tool_call:)
+const FINAL_ANSWER_STEP = (() => {
+  for (let i = STEPS.length - 1; i >= 0; i--) {
+    const t = STEPS[i].transcript;
+    if (t && !Array.isArray(t) && t.role === 'Assistant' && !t.text.includes('tool_call:')) {
+      return i;
+    }
+  }
+  return -1;
+})();
 
 export function getCurrentStep() { return currentStep; }
 export function getTotalSteps() { return STEPS.length; }
@@ -32,6 +45,7 @@ export function goToStep(n) {
   currentStep = -1;
   clearTranscript();
   clearToolActivity();
+  clearUserView();
   resetDiagram();
 
   for (let i = 0; i <= n; i++) {
@@ -46,6 +60,9 @@ export function goToStep(n) {
 
     appendStepTranscript(step, i < n);
   }
+
+  // Rebuild user view state for this step
+  rebuildUserView(n);
 
   // Stream only the very last step if it's a stream step
   if (n >= 0) {
@@ -88,6 +105,17 @@ export function next() {
     } else {
       appendTranscript(step.transcript.role, step.transcript.text, false);
     }
+  }
+
+  // User view: show user message at step 0, final answer at delivery
+  if (currentStep === 0) {
+    showUserMessage();
+  } else if (currentStep >= FINAL_ANSWER_STEP) {
+    // Show final answer (replace thinking dots)
+    clearUserView();
+    showUserMessage();
+    const finalText = STEPS[FINAL_ANSWER_STEP].transcript.text;
+    showAssistantMessage(finalText);
   }
 
   updateUI();
@@ -164,7 +192,6 @@ function cancelStream() {
 
 /**
  * Append transcript entries for a step during replay.
- * Handles both single objects and arrays of entries.
  */
 function appendStepTranscript(step, dim) {
   if (!step.transcript) return;
@@ -172,6 +199,22 @@ function appendStepTranscript(step, dim) {
     step.transcript.forEach(t => appendTranscript(t.role, t.text, dim));
   } else {
     appendTranscript(step.transcript.role, step.transcript.text, dim);
+  }
+}
+
+/**
+ * Rebuild user view state for a given step index (used during goToStep replay).
+ */
+function rebuildUserView(stepIdx) {
+  clearUserView();
+  if (stepIdx < 0) return;
+
+  // Once past step 0, user message is always visible
+  showUserMessage();
+
+  if (stepIdx >= FINAL_ANSWER_STEP) {
+    const finalText = STEPS[FINAL_ANSWER_STEP].transcript.text;
+    showAssistantMessage(finalText);
   }
 }
 

@@ -196,10 +196,27 @@ html, body {
   marker-end: url(#arrow-head);
 }
 
-/* ── Transcript (3/5 of screen) ── */
-#transcript-section {
+/* ── Bottom section (3/5 of screen, two columns) ── */
+#bottom-section {
   flex: 3 1 60%;
   min-height: 0;
+  display: flex;
+  gap: 0.5rem;
+}
+
+#bottom-section h2 {
+  font-size: 0.8rem;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-bottom: 0.4rem;
+  flex-shrink: 0;
+}
+
+/* ── User View (left ~1/3) ── */
+#user-view-panel {
+  flex: 1 1 33%;
+  min-width: 0;
   background: var(--bg-surface);
   border-radius: 10px;
   padding: 0.75rem;
@@ -208,13 +225,77 @@ html, body {
   flex-direction: column;
 }
 
-#transcript-section h2 {
-  font-size: 0.8rem;
-  color: var(--text-dim);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  margin-bottom: 0.4rem;
-  flex-shrink: 0;
+#user-view {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  padding: 0.5rem 0;
+}
+
+.uv-bubble {
+  padding: 0.6rem 0.85rem;
+  border-radius: 12px;
+  font-size: 0.95rem;
+  line-height: 1.5;
+  max-width: 95%;
+  word-break: break-word;
+  animation: uv-fade-in 0.3s ease-out;
+}
+
+@keyframes uv-fade-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.uv-user {
+  background: #1a3a5c;
+  color: #c0ddff;
+  align-self: flex-end;
+  border-bottom-right-radius: 4px;
+}
+
+.uv-assistant {
+  background: #2a2a4a;
+  color: var(--text);
+  align-self: flex-start;
+  border-bottom-left-radius: 4px;
+}
+
+.uv-thinking {
+  display: flex;
+  gap: 5px;
+  padding: 0.6rem 0.85rem;
+  align-self: flex-start;
+}
+
+.uv-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-dim);
+  animation: uv-bounce 1.4s infinite;
+}
+
+.uv-dot:nth-child(2) { animation-delay: 0.2s; }
+.uv-dot:nth-child(3) { animation-delay: 0.4s; }
+
+@keyframes uv-bounce {
+  0%, 80%, 100% { transform: translateY(0); opacity: 0.3; }
+  40% { transform: translateY(-6px); opacity: 1; }
+}
+
+/* ── Chat Transcript (right ~2/3) ── */
+#transcript-panel {
+  flex: 2 1 67%;
+  min-width: 0;
+  background: var(--bg-surface);
+  border-radius: 10px;
+  padding: 0.75rem;
+  border: 1px solid #222244;
+  display: flex;
+  flex-direction: column;
 }
 
 #transcript {

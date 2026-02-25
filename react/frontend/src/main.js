@@ -4,10 +4,12 @@
 
 import './styles.css';
 import { initTranscript } from './transcript.js';
+import { initUserView } from './user-view.js';
 import { init, next, prev, reset, toggleAutoplay } from './animator.js';
 
 document.addEventListener('DOMContentLoaded', () => {
   initTranscript();
+  initUserView();
   init();
 
   document.getElementById('btn-next').addEventListener('click', next);
