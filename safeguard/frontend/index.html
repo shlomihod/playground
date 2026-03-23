@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Safeguard Playground</title>
+</head>
+<body>
+  <div id="app">
+    <!-- Header -->
+    <header id="header">
+      <div class="header-left">
+        <h1>Safeguard Playground</h1>
+        <span class="header-model">gpt-oss-safeguard-20b</span>
+      </div>
+      <div class="header-right">
+        <div id="mode-toggle" class="toggle-group">
+          <button class="toggle-btn active" data-mode="walkthrough">Walkthrough</button>
+          <button class="toggle-btn" data-mode="play">Play</button>
+        </div>
+        <!-- Walkthrough controls -->
+        <div id="walkthrough-controls">
+          <span id="step-counter">Step 0/0</span>
+          <button id="btn-prev" title="Previous step">&#171; Prev</button>
+          <button id="btn-next" title="Next step">Next &#187;</button>
+          <button id="btn-auto" title="Auto-play (Space)">Auto-play</button>
+          <button id="btn-reset" title="Reset (R)">Reset</button>
+        </div>
+        <!-- Play mode: API key (in header to save space) -->
+        <div id="api-config" class="hidden">
+          <input type="password" id="api-key-input" placeholder="OpenRouter API key" />
+          <button id="clear-key-btn" class="btn-small hidden">Clear</button>
+        </div>
+      </div>
+    </header>
+
+    <!-- Pipeline Diagram -->
+    <section id="diagram-section">
+      <svg id="pipeline-svg" viewBox="0 0 1000 260" preserveAspectRatio="xMidYMid meet">
+        <defs>
+          <marker id="arrow-head" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="var(--accent)" />
+          </marker>
+          <marker id="arrow-head-safe" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="var(--safe-color)" />
+          </marker>
+          <marker id="arrow-head-unsafe" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="var(--unsafe-color)" />
+          </marker>
+        </defs>
+
+        <!-- User Input node -->
+        <rect class="node node-input" x="20" y="60" width="120" height="55" rx="10" />
+        <text class="node-label" x="80" y="92">User Input</text>
+
+        <!-- Safeguard Model node -->
+        <rect class="node node-safeguard" x="220" y="60" width="160" height="55" rx="10" />
+        <text class="node-label" x="300" y="87" id="safeguard-node-label">Safeguard</text>
+        <text class="node-sublabel" x="300" y="105">gpt-oss-safeguard-20b</text>
+
+        <!-- Policy node (below safeguard) -->
+        <rect class="node node-policy" x="235" y="170" width="130" height="45" rx="8" />
+        <text class="node-label node-label-sm" x="300" y="197">Policy</text>
+
+        <!-- Decision Gate (diamond) -->
+        <g id="decision-gate" class="node-gate">
+          <rect class="gate-diamond" x="468" y="62" width="50" height="50" rx="4" transform="rotate(45 493 87)" />
+          <text class="gate-label" x="493" y="92" id="gate-text">?</text>
+        </g>
+
+        <!-- Main LLM node -->
+        <rect class="node node-llm" x="610" y="60" width="120" height="55" rx="10" />
+        <text class="node-label" x="670" y="82">Main LLM</text>
+        <text class="node-sublabel" x="670" y="100">openai/gpt-4.1-nano</text>
+
+        <!-- Output node -->
+        <rect class="node node-output" x="810" y="60" width="110" height="55" rx="10" />
+        <text class="node-label" x="865" y="92">Output</text>
+
+        <!-- Blocked node (below decision gate) -->
+        <rect class="node node-blocked" x="443" y="185" width="100" height="40" rx="8" />
+        <text class="node-label node-label-sm blocked-label" x="493" y="210">Blocked</text>
+
+        <!-- Category labels (below blocked) -->
+        <text class="category-label" id="category-text" x="493" y="240"></text>
+
+        <!-- Arrows -->
+        <line class="arrow" id="arrow-input-safeguard" x1="140" y1="87" x2="218" y2="87" />
+        <line class="arrow" id="arrow-policy-safeguard" x1="300" y1="170" x2="300" y2="117" />
+        <line class="arrow" id="arrow-safeguard-gate"   x1="380" y1="87" x2="466" y2="87" />
+        <line class="arrow arrow-safe" id="arrow-gate-llm" x1="520" y1="87" x2="608" y2="87" />
+        <line class="arrow arrow-safe" id="arrow-llm-output" x1="730" y1="87" x2="808" y2="87" />
+        <line class="arrow arrow-unsafe" id="arrow-gate-blocked" x1="493" y1="114" x2="493" y2="183" />
+
+        <!-- Verdict text (appears near gate) -->
+        <text class="verdict-label" id="verdict-safe" x="493" y="50">SAFE</text>
+        <text class="verdict-label verdict-unsafe" id="verdict-unsafe" x="493" y="50">UNSAFE</text>
+      </svg>
+    </section>
+
+    <!-- Bottom: 3 panels -->
+    <section id="bottom-section">
+      <!-- Left Panel: Controls -->
+      <div id="left-panel">
+        <!-- Walkthrough mode: scenario selector -->
+        <div id="walkthrough-left" class="panel-content">
+          <h2>Scenario</h2>
+          <div id="scenario-selector"></div>
+          <div id="scenario-description"></div>
+        </div>
+
+        <!-- Play mode: policy viewer + input -->
+        <div id="play-left" class="panel-content hidden">
+          <h2>Policy</h2>
+          <div id="policy-selector-container"></div>
+          <div id="policy-viewer"></div>
+          <h2 class="mt">Try these</h2>
+          <div id="play-examples"></div>
+          <h2 class="mt">Input</h2>
+          <textarea id="user-input" placeholder="Type a message to classify..." rows="3"></textarea>
+          <div class="input-actions">
+            <button id="btn-classify" disabled>Classify</button>
+            <label class="checkbox-label">
+              <input type="checkbox" id="chk-generate" checked />
+              Generate response if safe
+            </label>
+          </div>
+          <div id="generation-hint" class="hint">Enter your OpenRouter API key to use Play mode</div>
+        </div>
+      </div>
+
+      <!-- Center Panel: User View (what the end user sees) -->
+      <div id="user-view-panel">
+        <h2>User View</h2>
+        <div id="user-view"></div>
+      </div>
+
+      <!-- Right Panel: Safeguard Details (shared transcript for both modes) -->
+      <div id="right-panel">
+        <h2>Safeguard Details</h2>
+        <div id="transcript"></div>
+      </div>
+    </section>
+  </div>
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
