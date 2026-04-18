@@ -65,6 +65,13 @@ export function initTheme(mountEl) {
     }
   });
 
+  addEventListener('pageshow', () => {
+    let stored = null;
+    try { stored = localStorage.getItem(KEY); } catch {}
+    applyTheme(validate(stored) || systemPreference());
+    render(btn);
+  });
+
   try {
     const mq = matchMedia('(prefers-color-scheme: dark)');
     const onChange = () => {

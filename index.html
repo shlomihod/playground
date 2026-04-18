@@ -127,6 +127,16 @@
         var v = validate(e.newValue);
         if (v) apply(v);
       });
+      addEventListener('pageshow', function () {
+        var stored = null;
+        try { stored = localStorage.getItem(KEY); } catch (e) {}
+        var v = validate(stored);
+        if (!v) {
+          try { v = matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark'; }
+          catch (e) { v = 'dark'; }
+        }
+        apply(v);
+      });
       try {
         var mq = matchMedia('(prefers-color-scheme: dark)');
         var onChange = function () {
