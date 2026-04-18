@@ -8,16 +8,33 @@ const TRAIL_LENGTH = 8;
 const TRANSITION_MS = 200;
 const LINE_STAGGER_MS = 80;
 
-// Source-to-color mapping
-const SOURCE_COLORS = [
+// Source-to-color mapping (per-theme so fills stay legible on either background)
+const SOURCE_COLORS_DARK = [
   '#ff6b6b', '#4ecdc4', '#45b7d1', '#96e6a1',
   '#dda0dd', '#f4a460', '#87ceeb', '#ffd700', '#ff69b4',
 ];
+const SOURCE_COLORS_LIGHT = [
+  '#c03434', '#0b8b85', '#0b63b8', '#2f8f44',
+  '#8e44ad', '#b86b20', '#1f6ea8', '#a67c00', '#c0338a',
+];
+
+function currentTheme() {
+  return document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
+}
+
+function paletteForTheme(theme) {
+  return theme === 'light' ? SOURCE_COLORS_LIGHT : SOURCE_COLORS_DARK;
+}
+
+function readCssVar(name) {
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+}
 
 let svg, xScale, yScale, width, height;
 let docGroup, queryGroup, lineGroup, trailGroup, labelGroup;
 let tooltip;
 let sourceColorMap = {};
+let sourceList = [];
 let categoryMap = new Map();
 let trail = [];
 let currentTopK = [];
@@ -49,11 +66,11 @@ export function initScatter(container, embeddings, chunks) {
     .domain([yExtent[0] - yPad, yExtent[1] + yPad])
     .range([margin.top + innerH, margin.top]);
 
-  // Source colors
-  const sources = [...new Set(chunks.map(c => c.source))].sort();
-  sources.forEach((s, i) => {
-    sourceColorMap[s] = SOURCE_COLORS[i % SOURCE_COLORS.length];
-  });
+  // Source colors (re-computed on theme change so hues stay legible on both backgrounds)
+  sourceList = [...new Set(chunks.map(c => c.source))].sort();
+  rebuildSourceColors();
+
+  document.addEventListener('themechange', onThemeChange);
 
   // SVG
   svg = d3.select(container)
@@ -97,6 +114,7 @@ export function initScatter(container, embeddings, chunks) {
     .attr('opacity', 0.7)
     .attr('stroke', 'none')
     .attr('data-id', d => d.id)
+    .attr('data-source', d => chunkMap.get(d.id)?.source || '')
     .on('mouseenter', (event, d) => showTooltip(event, d, chunkMap))
     .on('mouseleave', hideTooltip);
 
@@ -106,24 +124,58 @@ export function initScatter(container, embeddings, chunks) {
     .attr('class', 'chunk-tooltip');
 
   // Legend
-  const legendEl = document.getElementById('legend');
-  if (legendEl) {
-    const entries = [
-      { label: 'Super Bowl', category: 'nfl' },
-      { label: 'Winter Olympics', category: 'olympics' },
-    ];
-    legendEl.innerHTML = entries.map(e => {
-      const sym = d3.symbol().type(e.category === 'olympics' ? d3.symbolDiamond : d3.symbolCircle).size(64)();
-      return `<span class="legend-item">
-        <svg class="legend-swatch" width="14" height="14" viewBox="-7 -7 14 14">
-          <path d="${sym}" fill="white"/>
-        </svg>
-        ${e.label}
-      </span>`;
-    }).join('');
-  }
+  renderLegend();
 
   return { sourceColorMap };
+}
+
+function renderLegend() {
+  const legendEl = document.getElementById('legend');
+  if (!legendEl) return;
+  const entries = [
+    { label: 'Super Bowl', category: 'nfl' },
+    { label: 'Winter Olympics', category: 'olympics' },
+  ];
+  legendEl.innerHTML = entries.map(e => {
+    const sym = d3.symbol().type(e.category === 'olympics' ? d3.symbolDiamond : d3.symbolCircle).size(64)();
+    return `<span class="legend-item">
+      <svg class="legend-swatch" width="14" height="14" viewBox="-7 -7 14 14">
+        <path d="${sym}" fill="currentColor"/>
+      </svg>
+      ${e.label}
+    </span>`;
+  }).join('');
+}
+
+function rebuildSourceColors() {
+  const palette = paletteForTheme(currentTheme());
+  sourceList.forEach((s, i) => {
+    sourceColorMap[s] = palette[i % palette.length];
+  });
+}
+
+function onThemeChange() {
+  rebuildSourceColors();
+  if (docGroup) {
+    docGroup.selectAll('.doc-point')
+      .attr('fill', function () {
+        const source = this.getAttribute('data-source');
+        return sourceColorMap[source] || '#666';
+      });
+  }
+  const accent = readCssVar('--accent') || 'currentColor';
+  if (queryGroup) {
+    queryGroup.selectAll('rect')
+      .attr('fill', readCssVar('--bg-surface') || 'white')
+      .attr('stroke', accent);
+  }
+  if (trailGroup) trailGroup.selectAll('circle').attr('fill', accent);
+  if (lineGroup) lineGroup.selectAll('line').attr('stroke', accent);
+  if (labelGroup) labelGroup.selectAll('text').attr('fill', accent);
+  if (docGroup) {
+    docGroup.selectAll('.doc-point.highlight-stroke')
+      .attr('stroke', accent);
+  }
 }
 
 function showTooltip(event, d, chunkMap) {
@@ -157,6 +209,9 @@ export function updateQueryPoint(x, y) {
   trail.push({ cx, cy });
   if (trail.length > TRAIL_LENGTH) trail.shift();
 
+  const accent = readCssVar('--accent') || 'currentColor';
+  const queryFill = readCssVar('--bg-surface') || 'white';
+
   // Render trail
   trailGroup.selectAll('circle')
     .data(trail)
@@ -164,7 +219,7 @@ export function updateQueryPoint(x, y) {
     .attr('cx', d => d.cx)
     .attr('cy', d => d.cy)
     .attr('r', 3)
-    .attr('fill', 'var(--accent)')
+    .attr('fill', accent)
     .attr('opacity', (d, i) => (i + 1) / trail.length * 0.3);
 
   // Query point (square)
@@ -177,9 +232,9 @@ export function updateQueryPoint(x, y) {
       .attr('y', cy - size / 2)
       .attr('width', size)
       .attr('height', size)
-      .attr('fill', 'white')
+      .attr('fill', queryFill)
       .attr('filter', 'url(#query-glow)')
-      .attr('stroke', 'var(--accent)')
+      .attr('stroke', accent)
       .attr('stroke-width', 2),
     update => update.transition().duration(TRANSITION_MS).ease(d3.easeCubicOut)
       .attr('x', cx - size / 2)
@@ -212,12 +267,14 @@ export function showConnections(queryX, queryY, topK, embeddings) {
   lineGroup.selectAll('line').remove();
   labelGroup.selectAll('text').remove();
 
+  const accent = readCssVar('--accent') || 'currentColor';
+
   lineGroup.selectAll('line')
     .data(lineData)
     .join('line')
     .attr('x1', d => d.x1).attr('y1', d => d.y1)
     .attr('x2', d => d.x1).attr('y2', d => d.y1)
-    .attr('stroke', 'var(--accent)')
+    .attr('stroke', accent)
     .attr('stroke-width', d => 2 - d.rank * 0.25)
     .attr('stroke-opacity', d => 0.8 - d.rank * 0.1)
     .attr('stroke-dasharray', '4 2')
@@ -236,7 +293,7 @@ export function showConnections(queryX, queryY, topK, embeddings) {
     .attr('text-anchor', 'middle')
     .attr('font-size', '11px')
     .attr('font-family', 'var(--font-mono)')
-    .attr('fill', 'var(--accent)')
+    .attr('fill', accent)
     .attr('opacity', 0)
     .text(d => d.score.toFixed(3))
     .transition()
@@ -248,11 +305,12 @@ export function showConnections(queryX, queryY, topK, embeddings) {
   const topKIds = new Set(topK.map(t => t.id));
 
   docGroup.selectAll('.doc-point')
+    .classed('highlight-stroke', d => topKIds.has(d.id))
     .transition().duration(300)
     .attr('d', d => symbolPath(categoryMap.get(d.id), topKIds.has(d.id) ? 200 : 50))
     .attr('opacity', d => topKIds.has(d.id) ? 1 : 0.2)
     .attr('filter', d => topKIds.has(d.id) ? 'url(#glow)' : 'none')
-    .attr('stroke', d => topKIds.has(d.id) ? 'white' : 'none')
+    .attr('stroke', d => topKIds.has(d.id) ? accent : 'none')
     .attr('stroke-width', d => topKIds.has(d.id) ? 1.5 : 0);
 }
 
@@ -265,6 +323,7 @@ export function clearConnections() {
   currentTopK = [];
 
   docGroup.selectAll('.doc-point')
+    .classed('highlight-stroke', false)
     .transition().duration(200)
     .attr('d', d => symbolPath(categoryMap.get(d.id), 78))
     .attr('opacity', 0.7)

@@ -9,6 +9,7 @@ import { resetPipeline } from './pipeline.js';
 import { getScenarios } from './scenario.js';
 import { setScenario, next, prev, reset, toggleAutoplay } from './animator.js';
 import { initPlayMode } from './safeguard-api.js';
+import { initTheme } from '../../../_shared/theme.js';
 
 let currentMode = 'walkthrough';
 
@@ -21,6 +22,9 @@ function init() {
   renderScenarioChips();
   updateModeVisibility();
   initPlayMode();
+
+  const headerRight = document.querySelector('.header-right');
+  if (headerRight) initTheme(headerRight);
 }
 
 function wireModeToggle() {

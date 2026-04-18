@@ -11,6 +11,7 @@ import {
   renderAugmentedPrompt, clearResults, renderHeatmaps,
 } from './panel.js';
 import { initGeneration } from './generation.js';
+import { initTheme } from '../../../_shared/theme.js';
 
 const DEBOUNCE_MS = 300;
 const PAUSE_MS = 1000;
@@ -52,6 +53,10 @@ async function main() {
   initPanel(chunks, sourceColorMap);
   initGeneration();
   clearResults();
+
+  // Theme toggle (appended to the control strip at the bottom of the panel)
+  const controlsEl = document.getElementById('controls');
+  if (controlsEl) initTheme(controlsEl);
 
   // Init embedding model (Web Worker)
   statusEl.textContent = 'Loading embedding model...';

@@ -6,6 +6,7 @@ import './styles.css';
 import { initTranscript } from './transcript.js';
 import { initUserView } from './user-view.js';
 import { init, next, prev, reset, toggleAutoplay } from './animator.js';
+import { initTheme } from '../../../_shared/theme.js';
 
 document.addEventListener('DOMContentLoaded', () => {
   initTranscript();
@@ -16,6 +17,9 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('btn-prev').addEventListener('click', prev);
   document.getElementById('btn-reset').addEventListener('click', reset);
   document.getElementById('btn-auto').addEventListener('click', toggleAutoplay);
+
+  const headerRight = document.querySelector('.header-right');
+  if (headerRight) initTheme(headerRight);
 
   document.addEventListener('keydown', (e) => {
     if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
