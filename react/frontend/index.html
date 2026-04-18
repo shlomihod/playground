@@ -4,6 +4,20 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>ReAct Pattern Playground</title>
+  <script>
+    (function () {
+      var ALLOWED = ['light', 'dark'];
+      function validate(v) { return ALLOWED.indexOf(v) >= 0 ? v : null; }
+      var stored = null;
+      try { stored = localStorage.getItem('playground-theme'); } catch (e) {}
+      var resolved = validate(stored);
+      if (!resolved) {
+        try { resolved = matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark'; }
+        catch (e) { resolved = 'dark'; }
+      }
+      document.documentElement.setAttribute('data-theme', resolved);
+    })();
+  </script>
 </head>
 <body>
   <div id="app">

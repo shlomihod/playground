@@ -8,4 +8,7 @@ export default defineConfig({
   worker: {
     format: 'es',
   },
+  server: {
+    fs: { allow: ['..', '../..', '../../..'] },
+  },
 });
