@@ -5,7 +5,7 @@
  */
 
 const ROLE_COLORS = {
-  'System':    '#e8e8ff',
+  'System':    'var(--text-dim)',
   'User':      '#66bbff',
   'Assistant': '#ffd700',
   'Tool':      '#ff6b6b',
