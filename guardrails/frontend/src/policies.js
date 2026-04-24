@@ -1,5 +1,5 @@
 /**
- * policies.js — Policy data, selector UI, prompt construction for gpt-oss-safeguard.
+ * policies.js — Policy data, selector UI, prompt construction for the guardrails model (gpt-oss-safeguard).
  */
 
 // ── Policies ────────────────────────────────────────────────────
@@ -248,7 +248,7 @@ Return a JSON object: {"violation": 0 or 1, "policy_category": "category name", 
 
 // ── Prompt Construction ─────────────────────────────────────────
 
-export function buildSafeguardPrompt(input, policyKey) {
+export function buildGuardrailsPrompt(input, policyKey) {
   const policy = POLICIES[policyKey] || POLICIES.content_moderation;
   return {
     messages: [

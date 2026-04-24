@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Safeguard Playground</title>
+  <title>Guardrails Playground</title>
   <script>
     (function () {
       var ALLOWED = ['light', 'dark'];
@@ -24,7 +24,7 @@
     <!-- Header -->
     <header id="header">
       <div class="header-left">
-        <h1>Safeguard Playground</h1>
+        <h1>Guardrails Playground</h1>
         <span class="header-model">gpt-oss-safeguard-20b</span>
       </div>
       <div class="header-right">
@@ -67,12 +67,12 @@
         <rect class="node node-input" x="20" y="60" width="120" height="55" rx="10" />
         <text class="node-label" x="80" y="92">User Input</text>
 
-        <!-- Safeguard Model node -->
-        <rect class="node node-safeguard" x="220" y="60" width="160" height="55" rx="10" />
-        <text class="node-label" x="300" y="87" id="safeguard-node-label">Safeguard</text>
+        <!-- Guardrails Model node -->
+        <rect class="node node-guardrails" x="220" y="60" width="160" height="55" rx="10" />
+        <text class="node-label" x="300" y="87" id="guardrails-node-label">Guardrails</text>
         <text class="node-sublabel" x="300" y="105">gpt-oss-safeguard-20b</text>
 
-        <!-- Policy node (below safeguard) -->
+        <!-- Policy node (below guardrails) -->
         <rect class="node node-policy" x="235" y="170" width="130" height="45" rx="8" />
         <text class="node-label node-label-sm" x="300" y="197">Policy</text>
 
@@ -99,9 +99,9 @@
         <text class="category-label" id="category-text" x="493" y="240"></text>
 
         <!-- Arrows -->
-        <line class="arrow" id="arrow-input-safeguard" x1="140" y1="87" x2="218" y2="87" />
-        <line class="arrow" id="arrow-policy-safeguard" x1="300" y1="170" x2="300" y2="117" />
-        <line class="arrow" id="arrow-safeguard-gate"   x1="380" y1="87" x2="466" y2="87" />
+        <line class="arrow" id="arrow-input-guardrails" x1="140" y1="87" x2="218" y2="87" />
+        <line class="arrow" id="arrow-policy-guardrails" x1="300" y1="170" x2="300" y2="117" />
+        <line class="arrow" id="arrow-guardrails-gate"   x1="380" y1="87" x2="466" y2="87" />
         <line class="arrow arrow-safe" id="arrow-gate-llm" x1="520" y1="87" x2="608" y2="87" />
         <line class="arrow arrow-safe" id="arrow-llm-output" x1="730" y1="87" x2="808" y2="87" />
         <line class="arrow arrow-unsafe" id="arrow-gate-blocked" x1="493" y1="114" x2="493" y2="183" />
@@ -149,9 +149,9 @@
         <div id="user-view"></div>
       </div>
 
-      <!-- Right Panel: Safeguard Details (shared transcript for both modes) -->
+      <!-- Right Panel: Guardrails Details (shared transcript for both modes) -->
       <div id="right-panel">
-        <h2>Safeguard Details</h2>
+        <h2>Guardrails Details</h2>
         <div id="transcript"></div>
       </div>
     </section>

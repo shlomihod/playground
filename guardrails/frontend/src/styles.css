@@ -451,7 +451,7 @@ h2.mt { margin-top: 0.75rem; }
   padding: 0.5rem 0;
 }
 
-/* Right Panel: Safeguard Details */
+/* Right Panel: Guardrails Details */
 #right-panel {
   flex: 2 1 50%;
   min-width: 0;

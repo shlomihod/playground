@@ -1,4 +1,4 @@
-# Safeguard Models Reference
+# Guardrails Models Reference
 
 ## Llama Guard 4 (Meta)
 

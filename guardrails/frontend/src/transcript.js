@@ -1,10 +1,10 @@
 /**
- * transcript.js — Shows the safeguard model interaction as actual API messages.
+ * transcript.js — Shows the guardrails model interaction as actual API messages.
  *
  * Roles match real API calls:
  *   system  — system prompt (gpt-oss-safeguard policy)
- *   user    — user message sent to the safeguard model
- *   assistant — safeguard model's response
+ *   user    — user message sent to the guardrails model
+ *   assistant — guardrails model's response
  */
 
 import { esc } from './utils.js';
@@ -34,7 +34,7 @@ export function appendTranscript(role, text, dim) {
   const textSpan = entry.querySelector('.transcript-text');
 
   if (role === 'assistant') {
-    textSpan.innerHTML = highlightSafeguardOutput(text);
+    textSpan.innerHTML = highlightGuardrailsOutput(text);
   } else {
     textSpan.innerHTML = highlightPromptText(text);
   }
@@ -69,9 +69,9 @@ function createEntry(role) {
 }
 
 /**
- * Highlight safeguard model output — safe/unsafe verdict + JSON rationale.
+ * Highlight guardrails model output — safe/unsafe verdict + JSON rationale.
  */
-function highlightSafeguardOutput(text) {
+function highlightGuardrailsOutput(text) {
   try {
     const parsed = JSON.parse(text);
     const pretty = JSON.stringify(parsed, null, 2);

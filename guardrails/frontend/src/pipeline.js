@@ -6,15 +6,15 @@
  */
 
 const ARROW_IDS = [
-  'arrow-input-safeguard',
-  'arrow-policy-safeguard',
-  'arrow-safeguard-gate',
+  'arrow-input-guardrails',
+  'arrow-policy-guardrails',
+  'arrow-guardrails-gate',
   'arrow-gate-llm',
   'arrow-llm-output',
   'arrow-gate-blocked',
 ];
 
-const NODE_CLASSES = ['input', 'safeguard', 'policy', 'llm', 'output'];
+const NODE_CLASSES = ['input', 'guardrails', 'policy', 'llm', 'output'];
 
 export function resetPipeline() {
   // Reset arrows
@@ -85,14 +85,14 @@ export function animateStage(stage, data) {
   switch (stage) {
     case 'input':
       highlightNode('input');
-      showArrow('arrow-input-safeguard');
+      showArrow('arrow-input-guardrails');
       break;
 
     case 'classify':
-      highlightNode('safeguard');
+      highlightNode('guardrails');
       highlightNode('policy');
-      showArrow('arrow-policy-safeguard');
-      showArrow('arrow-safeguard-gate');
+      showArrow('arrow-policy-guardrails');
+      showArrow('arrow-guardrails-gate');
       break;
 
     case 'decision-safe': {

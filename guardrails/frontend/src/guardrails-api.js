@@ -1,8 +1,8 @@
 /**
- * safeguard-api.js — gpt-oss-safeguard classification via OpenRouter + Play mode wiring.
+ * guardrails-api.js — gpt-oss-safeguard classification via OpenRouter + Play mode wiring.
  */
 
-import { buildSafeguardPrompt, parseResult, renderPolicyViewer, renderPolicySelector } from './policies.js';
+import { buildGuardrailsPrompt, parseResult, renderPolicyViewer, renderPolicySelector } from './policies.js';
 import { resetPipeline, animateStage } from './pipeline.js';
 import { generate, abort, initGeneration } from './generation.js';
 import { showUserMessage, showAssistantMessage, showBlockedMessage, showStreamingMessage, appendStreamToken, clearUserView } from './user-view.js';
@@ -10,7 +10,7 @@ import { appendTranscript, clearTranscript } from './transcript.js';
 
 const ENDPOINT = 'https://openrouter.ai/api/v1/chat/completions';
 const STORAGE_KEY = 'openrouter_api_key';
-const SAFEGUARD_MODEL = 'openai/gpt-oss-safeguard-20b';
+const GUARDRAILS_MODEL = 'openai/gpt-oss-safeguard-20b';
 
 let isClassifying = false;
 
@@ -21,7 +21,7 @@ async function classify(input, policyKey) {
   const apiKey = localStorage.getItem(STORAGE_KEY);
   if (!apiKey) throw new Error('No API key set');
 
-  const { messages } = buildSafeguardPrompt(input, policyKey);
+  const { messages } = buildGuardrailsPrompt(input, policyKey);
   const start = performance.now();
 
   const res = await fetch(ENDPOINT, {
@@ -31,7 +31,7 @@ async function classify(input, policyKey) {
       'Authorization': `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
-      model: SAFEGUARD_MODEL,
+      model: GUARDRAILS_MODEL,
       messages,
       stream: false,
       temperature: 0,
@@ -81,7 +81,7 @@ async function runPlayPipeline() {
 
   // Step 2: Classify — show the prompt in transcript
   animateStage('classify');
-  const { messages } = buildSafeguardPrompt(input, policyKey);
+  const { messages } = buildGuardrailsPrompt(input, policyKey);
   for (const msg of messages) {
     appendTranscript(msg.role, msg.content, false);
   }
@@ -89,7 +89,7 @@ async function runPlayPipeline() {
   try {
     const result = await classify(input, policyKey);
 
-    // Step 3: Decision — show safeguard response in transcript
+    // Step 3: Decision — show guardrails response in transcript
     if (result.verdict === 'safe') {
       animateStage('decision-safe');
     } else {

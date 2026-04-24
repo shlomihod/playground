@@ -38,8 +38,8 @@ jobs:
           GITHUB_PAGES: "true"
         run: npm ci && npm run build
 
-      - name: Build Safeguard demo
-        working-directory: safeguard/frontend
+      - name: Build Guardrails demo
+        working-directory: guardrails/frontend
         env:
           GITHUB_PAGES: "true"
         run: npm ci && npm run build
@@ -50,7 +50,7 @@ jobs:
           cp index.html _site/
           cp -r rag/frontend/dist _site/rag
           cp -r react/frontend/dist _site/react
-          cp -r safeguard/frontend/dist _site/safeguard
+          cp -r guardrails/frontend/dist _site/guardrails
 
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3

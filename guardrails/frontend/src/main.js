@@ -8,7 +8,7 @@ import { initUserView } from './user-view.js';
 import { resetPipeline } from './pipeline.js';
 import { getScenarios } from './scenario.js';
 import { setScenario, next, prev, reset, toggleAutoplay } from './animator.js';
-import { initPlayMode } from './safeguard-api.js';
+import { initPlayMode } from './guardrails-api.js';
 import { initTheme } from '../../../_shared/theme.js';
 
 let currentMode = 'walkthrough';
