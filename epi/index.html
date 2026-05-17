@@ -111,7 +111,7 @@
 <div class="panels">
   <div class="panel">
     <div class="panel-title">Contact network</div>
-    <canvas id="net" width="380" height="380"></canvas>
+    <canvas id="net" width="760" height="760"></canvas>
   </div>
   <div class="panel">
     <div class="panel-title">Epicurve (infected over time)</div>
@@ -168,7 +168,8 @@
   const netCanvas = document.getElementById('net');
   const nctx = netCanvas.getContext('2d');
   const W = netCanvas.width, H = netCanvas.height;
-  const PAD = 20;
+  const PAD = 36;
+  const SCALE = W / 380; // canvas is 2x the original logical size
 
   let N = 200, K = 4, P = 0.15;
   let beta = 0.10, gamma = 0.19, speedSetting = 1;
@@ -189,8 +190,8 @@
     edges = [];
     for (let i = 0; i < N; i++){
       nodes.push({
-        x: W/2 + (Math.random() - 0.5) * 60,
-        y: H/2 + (Math.random() - 0.5) * 60,
+        x: W/2 + (Math.random() - 0.5) * 120,
+        y: H/2 + (Math.random() - 0.5) * 120,
         vx: 0, vy: 0,
         state: 'S'
       });
@@ -345,20 +346,21 @@
       const a = nodes[e.a], b = nodes[e.b];
       const isHot = (a.state === 'I' && b.state === 'S') || (a.state === 'S' && b.state === 'I');
       nctx.strokeStyle = isHot ? C_EDGE_HOT : C_EDGE;
-      nctx.lineWidth = isHot ? 1.4 : 0.8;
+      nctx.lineWidth = (isHot ? 1.4 : 0.8) * SCALE;
       nctx.beginPath();
       nctx.moveTo(a.x, a.y);
       nctx.lineTo(b.x, b.y);
       nctx.stroke();
     }
-    const nodeR = N < 60 ? 6 : N < 120 ? 5 : N < 200 ? 4 : 3.5;
+    const baseR = N < 60 ? 6 : N < 120 ? 5 : N < 200 ? 4.5 : 4;
+    const nodeR = baseR * SCALE;
     for (const n of nodes){
       nctx.beginPath();
       nctx.arc(n.x, n.y, nodeR, 0, Math.PI * 2);
       nctx.fillStyle = n.state === 'I' ? C_I : C_S;
       nctx.fill();
-      nctx.strokeStyle = 'rgba(255,255,255,0.7)';
-      nctx.lineWidth = 1;
+      nctx.strokeStyle = 'rgba(255,255,255,0.8)';
+      nctx.lineWidth = 1 * SCALE;
       nctx.stroke();
     }
   }
