@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>SIS epidemic on a small-world network</title>
+<style>
+  :root {
+    --bg: #fafaf7;
+    --surface: #ffffff;
+    --surface-2: #f1efe8;
+    --border: #dcd9cf;
+    --text: #2c2c2a;
+    --text-muted: #6a6a64;
+    --infected: #E24B4A;
+    --susceptible: #B5D4F4;
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    max-width: 980px;
+    margin: 24px auto;
+    padding: 0 16px;
+    color: var(--text);
+    background: var(--bg);
+  }
+  h1 { font-size: 20px; font-weight: 500; margin: 0 0 4px; }
+  .subtitle { color: var(--text-muted); font-size: 13px; margin: 0 0 20px; }
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+    margin-bottom: 16px;
+  }
+  .stat {
+    background: var(--surface-2);
+    border-radius: 8px;
+    padding: 10px 12px;
+  }
+  .stat .lbl { font-size: 12px; color: var(--text-muted); }
+  .stat .val { font-size: 22px; font-weight: 500; }
+  .stat .val.infected { color: var(--infected); }
+  .panels {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+  .panel {
+    background: var(--surface);
+    border: 0.5px solid var(--border);
+    border-radius: 12px;
+    padding: 10px;
+  }
+  .panel-title { font-size: 13px; color: var(--text-muted); margin-bottom: 6px; }
+  #net {
+    width: 100%;
+    height: auto;
+    background: var(--surface-2);
+    border-radius: 8px;
+    display: block;
+  }
+  .chart-wrap { position: relative; width: 100%; height: 340px; }
+  .controls {
+    background: var(--surface);
+    border: 0.5px solid var(--border);
+    border-radius: 12px;
+    padding: 14px 16px;
+  }
+  .sliders {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px 22px;
+    margin-bottom: 12px;
+  }
+  .slider-row { display: flex; align-items: center; gap: 10px; }
+  .slider-row label { font-size: 13px; color: var(--text-muted); min-width: 140px; }
+  .slider-row input[type="range"] { flex: 1; }
+  .slider-row .out { font-size: 13px; font-weight: 500; min-width: 44px; text-align: right; }
+  .buttons { display: flex; gap: 8px; flex-wrap: wrap; }
+  button {
+    flex: 1;
+    min-width: 100px;
+    padding: 8px 12px;
+    font-size: 13px;
+    background: var(--surface);
+    border: 0.5px solid var(--border);
+    border-radius: 6px;
+    cursor: pointer;
+    color: var(--text);
+    transition: background 0.15s;
+  }
+  button:hover { background: var(--surface-2); }
+  button:active { transform: scale(0.98); }
+  @media (max-width: 640px) {
+    .panels { grid-template-columns: 1fr; }
+    .sliders { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<h1>SIS epidemic on a small-world network</h1>
+<p class="subtitle">Watts–Strogatz contact graph · SIS dynamics · agent = node, color = infection state</p>
+
+<div class="stats">
+  <div class="stat"><div class="lbl">Infected</div><div id="stat-i" class="val infected">0</div></div>
+  <div class="stat"><div class="lbl">Prevalence</div><div id="stat-prev" class="val">0%</div></div>
+  <div class="stat"><div class="lbl">Day</div><div id="stat-t" class="val">0</div></div>
+</div>
+
+<div class="panels">
+  <div class="panel">
+    <div class="panel-title">Contact network</div>
+    <canvas id="net" width="380" height="380"></canvas>
+  </div>
+  <div class="panel">
+    <div class="panel-title">Epicurve (infected over time)</div>
+    <div class="chart-wrap"><canvas id="epicurve"></canvas></div>
+  </div>
+</div>
+
+<div class="controls">
+  <div class="sliders">
+    <div class="slider-row">
+      <label>β (per edge/day)</label>
+      <input type="range" id="beta" min="0.01" max="0.5" step="0.01" value="0.10">
+      <span id="beta-out" class="out">0.10</span>
+    </div>
+    <div class="slider-row">
+      <label>γ (recover/day)</label>
+      <input type="range" id="gamma" min="0.02" max="0.5" step="0.01" value="0.19">
+      <span id="gamma-out" class="out">0.19</span>
+    </div>
+    <div class="slider-row">
+      <label>Population (N)</label>
+      <input type="range" id="pop" min="30" max="300" step="10" value="200">
+      <span id="pop-out" class="out">200</span>
+    </div>
+    <div class="slider-row">
+      <label>Neighbours (k)</label>
+      <input type="range" id="kdeg" min="2" max="10" step="2" value="4">
+      <span id="kdeg-out" class="out">4</span>
+    </div>
+    <div class="slider-row">
+      <label>Rewire prob (p)</label>
+      <input type="range" id="prew" min="0" max="1" step="0.05" value="0.15">
+      <span id="prew-out" class="out">0.15</span>
+    </div>
+    <div class="slider-row">
+      <label>Speed (steps/s)</label>
+      <input type="range" id="speed" min="1" max="20" step="1" value="1">
+      <span id="speed-out" class="out">1</span>
+    </div>
+  </div>
+  <div class="buttons">
+    <button id="btn-play">▶ Play</button>
+    <button id="btn-step">Step</button>
+    <button id="btn-reset">Reset</button>
+    <button id="btn-rebuild">Rebuild network</button>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script>
+(function(){
+  const C_S = '#B5D4F4', C_I = '#E24B4A';
+  const C_EDGE = 'rgba(120,120,120,0.30)', C_EDGE_HOT = 'rgba(226,75,74,0.65)';
+  const netCanvas = document.getElementById('net');
+  const nctx = netCanvas.getContext('2d');
+  const W = netCanvas.width, H = netCanvas.height;
+  const PAD = 20;
+
+  let N = 200, K = 4, P = 0.15;
+  let beta = 0.10, gamma = 0.19, speedSetting = 1;
+
+  let nodes = [];
+  let adj = [];
+  let edges = [];
+  let history = { t: [], I: [] };
+  let day = 0;
+  let playing = false;
+  let rafId = null;
+  let lastStepTime = 0;
+  let layoutToken = 0;
+
+  function buildNetwork(){
+    nodes = [];
+    adj = [];
+    edges = [];
+    for (let i = 0; i < N; i++){
+      nodes.push({
+        x: W/2 + (Math.random() - 0.5) * 60,
+        y: H/2 + (Math.random() - 0.5) * 60,
+        vx: 0, vy: 0,
+        state: 'S'
+      });
+      adj.push(new Set());
+    }
+    const half = Math.max(1, Math.floor(K/2));
+    for (let i = 0; i < N; i++){
+      for (let j = 1; j <= half; j++){
+        const nb = (i + j) % N;
+        adj[i].add(nb);
+        adj[nb].add(i);
+      }
+    }
+    for (let i = 0; i < N; i++){
+      for (let j = 1; j <= half; j++){
+        if (Math.random() < P){
+          const oldNb = (i + j) % N;
+          let tries = 0;
+          while (tries < 50){
+            const cand = Math.floor(Math.random() * N);
+            if (cand !== i && !adj[i].has(cand)){
+              adj[i].delete(oldNb);
+              adj[oldNb].delete(i);
+              adj[i].add(cand);
+              adj[cand].add(i);
+              break;
+            }
+            tries++;
+          }
+        }
+      }
+    }
+    for (let i = 0; i < N; i++){
+      for (const j of adj[i]){
+        if (j > i) edges.push({a: i, b: j});
+      }
+    }
+    const seedCount = Math.max(2, Math.round(N * 0.05));
+    const picks = new Set();
+    while (picks.size < seedCount) picks.add(Math.floor(Math.random() * N));
+    for (const idx of picks) nodes[idx].state = 'I';
+  }
+
+  function runLayout(iterations){
+    const area = W * H;
+    const k = Math.sqrt(area / N) * 0.55;
+    const cx = W/2, cy = H/2;
+    for (let iter = 0; iter < iterations; iter++){
+      const t = 4 * (1 - iter / iterations);
+      for (const n of nodes){ n.vx = 0; n.vy = 0; }
+      for (let i = 0; i < N; i++){
+        for (let j = i + 1; j < N; j++){
+          const dx = nodes[i].x - nodes[j].x;
+          const dy = nodes[i].y - nodes[j].y;
+          let dist = Math.sqrt(dx*dx + dy*dy);
+          if (dist < 0.01) dist = 0.01;
+          const force = (k * k) / dist;
+          const fx = (dx / dist) * force;
+          const fy = (dy / dist) * force;
+          nodes[i].vx += fx; nodes[i].vy += fy;
+          nodes[j].vx -= fx; nodes[j].vy -= fy;
+        }
+      }
+      for (const e of edges){
+        const a = nodes[e.a], b = nodes[e.b];
+        const dx = a.x - b.x, dy = a.y - b.y;
+        let dist = Math.sqrt(dx*dx + dy*dy);
+        if (dist < 0.01) dist = 0.01;
+        const force = (dist * dist) / k;
+        const fx = (dx / dist) * force;
+        const fy = (dy / dist) * force;
+        a.vx -= fx; a.vy -= fy;
+        b.vx += fx; b.vy += fy;
+      }
+      for (const n of nodes){
+        n.vx += (cx - n.x) * 0.01;
+        n.vy += (cy - n.y) * 0.01;
+      }
+      for (const n of nodes){
+        const disp = Math.sqrt(n.vx*n.vx + n.vy*n.vy);
+        if (disp > 0){
+          const limited = Math.min(disp, t);
+          n.x += (n.vx / disp) * limited;
+          n.y += (n.vy / disp) * limited;
+        }
+        n.x = Math.max(PAD, Math.min(W - PAD, n.x));
+        n.y = Math.max(PAD, Math.min(H - PAD, n.y));
+      }
+    }
+  }
+
+  function countI(){
+    let I = 0;
+    for (const n of nodes) if (n.state === 'I') I++;
+    return I;
+  }
+
+  function reset(){
+    day = 0;
+    history = { t: [0], I: [] };
+    buildNetwork();
+    const iters = Math.min(400, 150 + N);
+    runLayout(iters);
+    history.I.push(countI());
+    updateStats();
+    drawNetwork();
+    updateChart();
+    const myToken = ++layoutToken;
+    let polish = 0;
+    function polishLoop(){
+      if (myToken !== layoutToken || polish > 60) return;
+      runLayout(2);
+      drawNetwork();
+      polish++;
+      requestAnimationFrame(polishLoop);
+    }
+    polishLoop();
+  }
+
+  function step(){
+    day += 1;
+    const newStates = nodes.map(n => n.state);
+    for (let i = 0; i < N; i++){
+      if (nodes[i].state === 'I'){
+        if (Math.random() < gamma) newStates[i] = 'S';
+      } else {
+        for (const j of adj[i]){
+          if (nodes[j].state === 'I'){
+            if (Math.random() < beta){ newStates[i] = 'I'; break; }
+          }
+        }
+      }
+    }
+    for (let i = 0; i < N; i++) nodes[i].state = newStates[i];
+    const I = countI();
+    history.t.push(day);
+    history.I.push(I);
+    if (history.t.length > 500){ history.t.shift(); history.I.shift(); }
+    updateStats();
+    drawNetwork();
+    updateChart();
+    if (I === 0) {
+      playing = false;
+      document.getElementById('btn-play').textContent = '▶ Play';
+      if (rafId) cancelAnimationFrame(rafId);
+    }
+  }
+
+  function drawNetwork(){
+    nctx.clearRect(0, 0, W, H);
+    for (const e of edges){
+      const a = nodes[e.a], b = nodes[e.b];
+      const isHot = (a.state === 'I' && b.state === 'S') || (a.state === 'S' && b.state === 'I');
+      nctx.strokeStyle = isHot ? C_EDGE_HOT : C_EDGE;
+      nctx.lineWidth = isHot ? 1.4 : 0.8;
+      nctx.beginPath();
+      nctx.moveTo(a.x, a.y);
+      nctx.lineTo(b.x, b.y);
+      nctx.stroke();
+    }
+    const nodeR = N < 60 ? 6 : N < 120 ? 5 : N < 200 ? 4 : 3.5;
+    for (const n of nodes){
+      nctx.beginPath();
+      nctx.arc(n.x, n.y, nodeR, 0, Math.PI * 2);
+      nctx.fillStyle = n.state === 'I' ? C_I : C_S;
+      nctx.fill();
+      nctx.strokeStyle = 'rgba(255,255,255,0.7)';
+      nctx.lineWidth = 1;
+      nctx.stroke();
+    }
+  }
+
+  function updateStats(){
+    const I = countI();
+    document.getElementById('stat-i').textContent = I;
+    document.getElementById('stat-prev').textContent = N > 0 ? Math.round(100 * I / N) + '%' : '0%';
+    document.getElementById('stat-t').textContent = day;
+  }
+
+  let chart;
+  function setupChart(){
+    chart = new Chart(document.getElementById('epicurve'), {
+      type: 'line',
+      data: {
+        labels: history.t,
+        datasets: [
+          {
+            label: 'Infected',
+            data: history.I,
+            borderColor: C_I,
+            backgroundColor: 'rgba(226,75,74,0.18)',
+            borderWidth: 2,
+            pointRadius: 0,
+            tension: 0.2,
+            fill: true
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: false,
+        scales: {
+          x: { title: { display: true, text: 'Day' }, ticks: { maxTicksLimit: 8 } },
+          y: { title: { display: true, text: 'Infected' }, beginAtZero: true, min: 0, max: N, ticks: { precision: 0 } }
+        },
+        plugins: { legend: { display: false } }
+      }
+    });
+  }
+
+  function updateChart(){
+    if (!chart) return;
+    chart.data.labels = history.t;
+    chart.data.datasets[0].data = history.I;
+    chart.options.scales.y.max = N;
+    chart.update('none');
+  }
+
+  function loop(ts){
+    if (!playing) return;
+    if (!lastStepTime) lastStepTime = ts;
+    const interval = 1000 / speedSetting;
+    if (ts - lastStepTime >= interval){
+      step();
+      lastStepTime = ts;
+    }
+    rafId = requestAnimationFrame(loop);
+  }
+
+  document.getElementById('btn-play').addEventListener('click', () => {
+    playing = !playing;
+    document.getElementById('btn-play').textContent = playing ? '⏸ Pause' : '▶ Play';
+    if (playing){
+      lastStepTime = 0;
+      rafId = requestAnimationFrame(loop);
+    } else if (rafId){
+      cancelAnimationFrame(rafId);
+    }
+  });
+  document.getElementById('btn-step').addEventListener('click', () => { if (!playing) step(); });
+  document.getElementById('btn-reset').addEventListener('click', () => { 
+    playing = false;
+    document.getElementById('btn-play').textContent = '▶ Play';
+    if (rafId) cancelAnimationFrame(rafId);
+    reset();
+  });
+  document.getElementById('btn-rebuild').addEventListener('click', () => {
+    playing = false;
+    document.getElementById('btn-play').textContent = '▶ Play';
+    if (rafId) cancelAnimationFrame(rafId);
+    reset();
+  });
+
+  function bindSlider(id, outId, cb){
+    const el = document.getElementById(id);
+    const out = document.getElementById(outId);
+    el.addEventListener('input', () => { out.textContent = el.value; cb(parseFloat(el.value)); });
+  }
+  bindSlider('beta', 'beta-out', v => { beta = v; });
+  bindSlider('gamma', 'gamma-out', v => { gamma = v; });
+  bindSlider('pop', 'pop-out', v => { N = Math.round(v); reset(); });
+  bindSlider('kdeg', 'kdeg-out', v => { K = Math.round(v); reset(); });
+  bindSlider('prew', 'prew-out', v => { P = v; reset(); });
+  bindSlider('speed', 'speed-out', v => { speedSetting = Math.round(v); });
+
+  reset();
+  setupChart();
+  updateChart();
+})();
+</script>
+</body>
+</html>
