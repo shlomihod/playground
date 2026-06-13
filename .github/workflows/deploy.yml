@@ -52,6 +52,7 @@ jobs:
           cp -r react/frontend/dist _site/react
           cp -r safeguard/frontend/dist _site/safeguard
           cp -r epi _site/epi
+          cp -r inject _site/inject
 
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
