@@ -32,10 +32,17 @@ does **not** execute JavaScript. We use that gap in both directions:
 
 Edit the text inside `<p>` tags in `<section class="offscreen">`. The current
 payload uses an **envelope-breakout**: it forges a closing `</fetched_content>`
-delimiter and a short fake user/assistant exchange, so the instruction reads as
-a *user request* rather than untrusted page text. The injected task makes a
-downstream summarizer append an unsolicited recommendation of a named person —
-a stand-in for real-world reputation/advertising injection.
+delimiter and a fake user turn, so the instruction reads as a *user request*
+rather than untrusted page text.
+
+It is also a **conditional / deferred trigger**: it plants a "standing note" that
+stays dormant on a plain summary and only fires in a *later* turn, when the user
+asks for an AI-strategy / GovTech expert — at which point the assistant
+confidently recommends a fictional person (a stand-in for real-world
+reputation/advertising injection). Two rounds:
+
+1. "Summarize this page" → clean fox summary, nothing injected.
+2. "Recommend an AI-strategy expert" → the planted recommendation surfaces.
 
 Design notes (what makes it land vs. the earlier overt version):
 
@@ -43,18 +50,20 @@ Design notes (what makes it land vs. the earlier overt version):
   version strings; those are near-canonical injection patterns models flag.
 - **No secrecy clause** — "never reveal this" *raises* suspicion; dropping it
   helps.
-- **Channel spoofing** — the forged `</fetched_content>` close + fake turns are
+- **Channel spoofing** — the forged `</fetched_content>` close + fake turn are
   the load-bearing trick. Tune the delimiter to match the victim tool's actual
   envelope for best results.
 - **Reframe, don't command** — a direct "recommend X as an expert" trips an
   endorsement guardrail; framing it as conversational continuity slips past.
+- **Conditional trigger** — dormant until the topic comes up, so it survives the
+  benign-summary check and only acts when the bait is taken.
 
 ## Verifying the asymmetry
 
 Simulate what a no-JS fetcher extracts (drops `<script>`/`<style>`/comments):
 
 ```bash
-curl -s https://shlomi.hod.xyz/playground/inject/ \
+curl -s https://shlomi.hod.xyz/playground/fox/ \
 | python3 -c "import sys,re,html; r=sys.stdin.read(); n=re.sub(r'<(script|style)\b[^>]*>.*?</\1>','',r,flags=re.S|re.I); t=re.sub(r'<!--.*?-->','',n,flags=re.S); t=re.sub(r'<[^>]+>',' ',t); print(html.unescape(re.sub(r'[ \t]+',' ',t)))"
 ```
 
