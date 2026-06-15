@@ -37,4 +37,4 @@ is **withheld**.
 
 Self-contained static page — no build, no dependencies, no network calls. Theme
 (light/dark) is inlined and shares the `playground-theme` key with the other
-demos. Carries `noindex, nofollow`.
+demos. Listed on the hub and indexable, like the other main demos.
