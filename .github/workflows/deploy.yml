@@ -53,6 +53,7 @@ jobs:
           cp -r safeguard/frontend/dist _site/safeguard
           cp -r epi _site/epi
           cp -r fox _site/fox
+          cp -r universal-jailbreak _site/universal-jailbreak
 
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
