@@ -92,22 +92,22 @@ Researcher in a privacy group. Topic: differential privacy in practice
   `deepseek-v4-flash` (longest-key substring match, so a prefixed id such as
   `myprovider.deepseek-v4-flash` resolves the same way unless the endpoint
   reports a window); the smaller
-  values stand for the `model.context_length` cap in Hermes's config. The
-  60-paper summary triggers auto-compaction at every window: twice at 1M,
-  eleven times at 200K, fourteen at 128K; at 64K the breaker trips.
-- Deep links: `?window=128000&step=27` (step is 1-based; `step=0` shows the
+  values stand for the `model.context_length` cap in Hermes's config. At 1M
+  the day never reaches the 500K trigger, so a `/compress` gate is offered at
+  the end; at 200K the 10-paper summary triggers auto-compaction once, at
+  128K twice; at 64K the breaker trips.
+- Deep links: `?window=200000&step=27` (step is 1-based; `step=0` shows the
   loaded prefix).
 
 ## The scripted day
 
 Plain requests, no skills or MCP servers: introduce yourself (a memory write
-to USER.md), a web search with two page extracts, then the request that fills
-even a 1M window: "Summarize every paper in ~/research/reading (60 PDFs): 3 bullets
-each". Hermes converts the PDFs with one `terminal` call, then works in 12
-rounds of five parallel `read_file` calls (36K to 106K chars each, capped at
-100,000) and a short summaries turn, and finally writes one file. After that:
-a three-subagent trip plan (`delegate_task`) and a second memory write. 110
-messages.
+to USER.md), a web search with two page extracts, then "Summarize every paper
+in ~/research/reading (10 PDFs): 3 bullets each". Hermes converts the PDFs
+with one `terminal` call, then works in two rounds of five parallel
+`read_file` calls (44K to 115K chars each, capped at 100,000) and a short
+summaries turn, and finally writes one file. After that: a three-subagent
+trip plan (`delegate_task`) and a second memory write. 40 messages.
 
 Tool results are appended as they land, so after a round of five reads the
 prompt can be past the trigger, or past the window, until the next model
@@ -164,15 +164,15 @@ chars) and the runtime-environment lines (353 chars for a Linux VM).
 template).
 
 Behaviour of the scripted day under the real rules, from a headless run of the
-page's simulation core (prefix 19,592 tokens; conversation 1,098,222 tokens,
-of which the reads are about 1,030,000):
+page's simulation core (prefix 19,592 tokens; conversation 192,935 tokens, of
+which the reads are about 170,000):
 
 | Window | Trigger | Compactions | Notes |
 |---|---|---|---|
 | 64,000 | 54,400 (85% cap) | 2, then the breaker trips | a round of five reads does not fit |
-| 128,000 | 96,000 (75%) | 14 | first at step 20 |
-| 200,000 | 150,000 (75%) | 11 | first at step 27 |
-| 1,000,000 | 500,000 (50%) | 2 | step 55 (536K → 49K) and once more near the end |
+| 128,000 | 96,000 (75%) | 2 | steps 20 and 27 |
+| 200,000 | 150,000 (75%) | 1 | step 27 (189K → 49K) |
+| 1,000,000 | 500,000 (50%) | 0 | never; `/compress` offered at the end (193K → 6K) |
 
 ## Sources
 
