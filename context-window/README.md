@@ -5,8 +5,9 @@ One visual for teaching the **context window of an agent**, with
 the worked instance, set up the way the Hermes workshop sets it up: `hermes`
 started in the home directory of a workshop VM as a personal assistant (not in
 a code project), with a short `~/AGENTS.md` of standing instructions, model
-`kit.deepseek-v4-flash` on the KIT KI-Toolbox endpoint, profile `default`. A 100-cell grid (one cell = 1% of the window, the same
-metaphor as Hermes's own `/context` command) fills as a day plays: what loads
+`kit.deepseek-v4-flash` on the KIT KI-Toolbox endpoint, profile `default`. A 500-cell grid (one cell = 0.2% of the window; Hermes's
+own `/context` command draws the same picture with 100 cells) fills as a day
+plays: what loads
 before the user types, what each request adds, and what compaction throws
 away. The shape follows Anthropic's
 ["Explore the context window"](https://code.claude.com/docs/en/context-window)
@@ -95,24 +96,30 @@ rows above load, and adds only the one-line profile line to the window.
   under a different window. 1M is the default, Hermes's own figure for
   `deepseek-v4-flash` (longest-key substring match, so `kit.deepseek-v4-flash`
   resolves the same way unless the endpoint reports a window); the smaller
-  values stand for the `model.context_length` cap in Hermes's config. At 1M
-  and 200K auto-compaction never fires, so a `/compress` gate is offered at
-  the end; at 128K it fires once, mid-session; at 64K five times, one of them
-  ineffective.
-- Deep links: `?window=128000&step=25` (step is 1-based; `step=0` shows the
-  loaded prefix). For a class, link `?window=128000` so the grid fills and
-  compaction fires during playback.
+  values stand for the `model.context_length` cap in Hermes's config. The
+  60-paper ingest triggers auto-compaction at every window: twice at 1M,
+  eleven times at 200K, fifteen at 128K, twenty-five at 64K.
+- Deep links: `?window=128000&step=37` (step is 1-based; `step=0` shows the
+  loaded prefix).
 
 ## The scripted day
 
 The requests are the ones the workshop's Part 1 demo uses, in the order the
 workshop builds them: introduce yourself (memory write to USER.md), web
 search, "my latest papers on arXiv" (the bundled `arxiv` skill via
-`skill_view`, then its script in `terminal`), download and read two papers
-(`read_file`, capped at 100,000 chars each), `/llm-wiki ingest` (a skill slash
-command, which pastes the 20,121-char SKILL.md into the user message), calendar
-and tasks through two MCP servers, a three-subagent trip plan
-(`delegate_task`), and a task plus a second memory write. 45 messages.
+`skill_view`, then its script in `terminal`), then the request that fills even
+a 1M window: `/llm-wiki ingest every PDF in ~/phd/reading (60 files)`. The
+slash command pastes the 20,121-char SKILL.md into the user message; Hermes
+converts the PDFs with one `terminal` call, then works in 12 rounds of five
+parallel `read_file` calls (36K to 106K chars each, capped at 100,000) and
+five `write_file` calls for the wiki pages. After that: calendar and tasks
+through two MCP servers, a three-subagent trip plan (`delegate_task`), and a
+task plus a second memory write. 180 messages.
+
+Tool results are appended as they land, so after a round of five reads the
+prompt can be past the trigger, or past the window, until the next model
+call; Hermes compacts in the preflight of that call. The page shows this
+transient state with its own key point rather than hiding it.
 
 ## What is real and what is scripted
 
@@ -165,14 +172,15 @@ servers' schemas (about 130 tokens per tool).
 template).
 
 Behaviour of the scripted day under the real rules, from a headless run of the
-page's simulation core (prefix 20,391 tokens; conversation 97,886 tokens):
+page's simulation core (prefix 20,391 tokens; conversation 1,117,753 tokens,
+of which the ingest is about 1,070,000):
 
-| Window | Trigger | Compactions | When |
+| Window | Trigger | Compactions | First one |
 |---|---|---|---|
-| 64,000 | 54,400 (85% cap) | 5 | steps 16, 22, 24 (ineffective: the 5,100-token skill message cannot be pruned), 26, 34 |
-| 128,000 | 96,000 (75%) | 1 | step 24 |
-| 200,000 | 150,000 (75%) | 0 | never; `/compress` offered at the end |
-| 1,000,000 | 500,000 (50%) | 0 | never; `/compress` offered at the end |
+| 64,000 | 54,400 (85% cap) | 25 | step 16 |
+| 128,000 | 96,000 (75%) | 15 | step 26 |
+| 200,000 | 150,000 (75%) | 11 | step 38 |
+| 1,000,000 | 500,000 (50%) | 2 | step 86 (553K → 54K), then step 146 |
 
 ## Sources
 

@@ -80,11 +80,11 @@
   .good { color: var(--safe); } .warn { color: var(--accent); } .bad { color: var(--warn); } .critical { color: var(--danger); }
 
   /* the window: 100 cells, one per 1% */
-  .ctxgrid { display: grid; grid-template-columns: repeat(20, 1fr); gap: 4px; width: 100%; }
-  .cell { background: var(--c-free); border-radius: 4px; aspect-ratio: 1; position: relative;
-    transition: background .35s ease, opacity .25s, outline-color .2s; outline: 2px solid transparent; outline-offset: -1px; }
-  .cell.zone::after { content: ''; position: absolute; inset: 0; border-radius: 4px;
-    background: repeating-linear-gradient(135deg, transparent 0 4px, rgba(255,107,107,.3) 4px 6px); pointer-events: none; }
+  .ctxgrid { display: grid; grid-template-columns: repeat(50, 1fr); gap: 2px; width: 100%; }
+  .cell { background: var(--c-free); border-radius: 2px; aspect-ratio: 1; position: relative;
+    transition: background .35s ease, opacity .25s, outline-color .2s; outline: 1.5px solid transparent; outline-offset: -1px; }
+  .cell.zone::after { content: ''; position: absolute; inset: 0; border-radius: 2px;
+    background: repeating-linear-gradient(135deg, transparent 0 3px, rgba(255,107,107,.3) 3px 5px); pointer-events: none; }
   .cell.trig { outline-color: var(--danger); }
   .cell.hi { outline-color: var(--text); z-index: 1; }
   .cell.dim { opacity: .28; }
@@ -164,7 +164,8 @@
     .detail { min-height: 0; }
     .ev { grid-template-columns: 44px minmax(0, 1fr) 50px; }
     .ev .mini { display: none; }
-    .ctxgrid { gap: 3px; }
+    .ctxgrid { gap: 1px; }
+    .cell { border-radius: 1px; outline-width: 1px; }
   }
 </style>
 </head>
@@ -186,7 +187,7 @@
     <div class="readout"><div class="big" id="roBig">0<small>tokens</small></div><div class="sub" id="roSub"></div></div>
   </div>
 
-  <div id="grid" class="ctxgrid" aria-label="Context window: one cell per 1%"></div>
+  <div id="grid" class="ctxgrid" aria-label="Context window: 500 cells, one per 0.2%"></div>
   <div class="gridcap">
     <div class="legend" id="legend"></div>
     <span class="trigkey"><i></i> auto-compaction fires here</span>
@@ -211,7 +212,7 @@
 <details class="src">
   <summary>What is real here, and sources</summary>
   <ul>
-    <li><b>Real:</b> the order and content of the system prompt (its stable, context and volatile parts: SOUL.md first, memory and the profile line last) and the size of each part, measured from the <a href="https://github.com/NousResearch/hermes-agent" target="_blank" rel="noopener">hermes-agent</a> source at commit <code>7520c4e8</code> (2026-10-15): identity and guidance text, the two DeepSeek-gated blocks, the index of 58 bundled skills, 37 of the 51 core tool schemas, the <code>arxiv</code> and <code>llm-wiki</code> skill bodies; the compaction rules (threshold 50% floored to 75% under 512K, 64K minimum, protected head and tail, tool-output stubs, skill pruning, summary budget, memory re-read when the system prompt is rebuilt); the 100-cell grid, status bar and colour bands of Hermes&rsquo;s own <code>/context</code> and CLI; the model: Hermes&rsquo;s model table gives <code>deepseek-v4-flash</code> a 1,000,000-token window (the KIT endpoint may report a smaller one; pick what your status bar shows), and the smaller windows stand for the <code>model.context_length</code> config cap. Tokens are Hermes&rsquo;s own estimate: 4 characters &asymp; 1 token. The tools in the session are Hermes&rsquo;s registered tools; MCP tool names follow its <code>mcp__server__tool</code> scheme.</li>
+    <li><b>Real:</b> the order and content of the system prompt (its stable, context and volatile parts: SOUL.md first, memory and the profile line last) and the size of each part, measured from the <a href="https://github.com/NousResearch/hermes-agent" target="_blank" rel="noopener">hermes-agent</a> source at commit <code>7520c4e8</code> (2026-10-15): identity and guidance text, the two DeepSeek-gated blocks, the index of 58 bundled skills, 37 of the 51 core tool schemas, the <code>arxiv</code> and <code>llm-wiki</code> skill bodies; the compaction rules (threshold 50% floored to 75% under 512K, 64K minimum, protected head and tail, tool-output stubs, skill pruning, summary budget, memory re-read when the system prompt is rebuilt); the grid idea, status bar and colour bands of Hermes&rsquo;s own <code>/context</code> and CLI (Hermes draws 100 cells, one per percent; this page draws 500 so the small parts show); the model: Hermes&rsquo;s model table gives <code>deepseek-v4-flash</code> a 1,000,000-token window (the KIT endpoint may report a smaller one; pick what your status bar shows), and the smaller windows stand for the <code>model.context_length</code> config cap. Tokens are Hermes&rsquo;s own estimate: 4 characters &asymp; 1 token. The tools in the session are Hermes&rsquo;s registered tools; MCP tool names follow its <code>mcp__server__tool</code> scheme.</li>
     <li><b>Estimated or sample:</b> the two MCP servers&rsquo; schema sizes, the AGENTS.md, MEMORY.md and USER.md contents, the runtime-environment lines.</li>
     <li><b>Scripted:</b> the day itself. Its messages and token counts are illustrative, in the spirit of Anthropic&rsquo;s <a href="https://code.claude.com/docs/en/context-window" target="_blank" rel="noopener">Explore the context window</a> simulation for Claude Code, which inspired this page.</li>
     <li>Hermes docs: <a href="https://hermes-agent.nousresearch.com/docs/developer-guide/context-compression-and-caching" target="_blank" rel="noopener">Context Compression and Caching</a>, <a href="https://hermes-agent.nousresearch.com/docs/developer-guide/prompt-assembly" target="_blank" rel="noopener">Prompt Assembly</a>, <a href="https://hermes-agent.nousresearch.com/docs/user-guide/features/memory" target="_blank" rel="noopener">Persistent Memory</a>. Source file and line references are in this demo&rsquo;s README.</li>
@@ -318,6 +319,25 @@ var MEMORY_MD_CHARS = 517, USER_MD_CHARS = 364;               // sample files fo
 var COMPRESSION_NOTE_TOKENS = 93;                             // _COMPRESSION_NOTE, context_compressor.py L5352 (370 chars)
 
 // The scripted session: a personal assistant in the terminal. Tokens are illustrative; the tool caps are real.
+var READING_FILES = 60, READS_PER_ROUND = 5, READ_FILE_MAX_CHARS = 100000;
+function readingChars(k) { return 36000 + ((k * 7919) % 70000); }          // 36K–106K chars per pdftotext file, deterministic
+function readingBatch() {
+  var rows = [];
+  for (var r = 0; r < READING_FILES / READS_PER_ROUND; r++) {
+    var first = r * READS_PER_ROUND + 1, last = first + READS_PER_ROUND - 1, pad = function (n) { return (n < 10 ? '0' : '') + n; };
+    rows.push({ role: 'assistant', title: 'read_file × ' + READS_PER_ROUND + ' (p' + pad(first) + '–p' + pad(last) + ', parallel)', tokens: 120, tool: 'read_file', batch: true,
+      text: 'thinking: Independent reads, so issue them in one turn.\n\n' + Array.apply(null, Array(READS_PER_ROUND)).map(function (_, i) { return 'tool_call: read_file(path="~/phd/reading/p' + pad(first + i) + '.txt")'; }).join('\n') });
+    for (var i = 0; i < READS_PER_ROUND; i++) {
+      var k = first + i, chars = readingChars(k), capped = chars > READ_FILE_MAX_CHARS, got = Math.min(chars, READ_FILE_MAX_CHARS);
+      rows.push({ role: 'tool', title: 'read_file → p' + pad(k) + '.txt, ' + got.toLocaleString('en-US') + ' chars' + (capped ? ' [CAPPED]' : ''), tokens: Math.ceil(got / 4), tool: 'read_file', batch: true,
+        text: '[~/phd/reading/p' + pad(k) + '.txt — ' + chars.toLocaleString('en-US') + ' chars' + (capped ? '; read_file returns the first 100,000' : '') + ']\n\n' + (k % 3 === 0 ? 'Abstract. We study the choice of epsilon in …' : k % 3 === 1 ? 'Abstract. Differential privacy guarantees are often stated …' : 'Abstract. This report evaluates a deployed mechanism …') });
+    }
+    rows.push({ role: 'assistant', title: 'write_file × ' + READS_PER_ROUND + ' wiki pages', tokens: 400, tool: 'write_file', batch: true,
+      text: Array.apply(null, Array(READS_PER_ROUND)).map(function (_, i) { return 'tool_call: write_file(path="~/wiki/sources/p' + pad(first + i) + '.md", content=…)'; }).join('\n') });
+    for (var j = 0; j < READS_PER_ROUND; j++) rows.push({ role: 'tool', title: 'write_file → sources/p' + pad(first + j) + '.md', tokens: 40, tool: 'write_file', batch: true, text: 'Wrote ~/wiki/sources/p' + pad(first + j) + '.md (' + (1800 + ((first + j) * 131) % 900) + ' chars)' });
+  }
+  return rows;
+}
 var SCRIPT = [
   { role: 'user', title: 'Hi, I’m a PhD student at KIT…', tokens: 40, text: 'Hi! I’m a PhD student at KIT working on differential privacy in practice. I prefer short bullet answers.' },
   { role: 'assistant', title: 'memory(add → USER.md)', tokens: 80, tool: 'memory', text: 'tool_call: memory(action="add", target="user", content="PhD student at KIT working on differential privacy in practice. Prefers short bullet answers.")' },
@@ -335,19 +355,11 @@ var SCRIPT = [
   { role: 'assistant', title: 'terminal: arxiv_search.py --author', tokens: 90, tool: 'terminal', text: 'tool_call: terminal(command="python3 ~/.hermes/skills/research/arxiv/scripts/arxiv_search.py --author \'Shlomi Hod\' --max 12 --sort submitted")' },
   { role: 'tool', title: 'terminal → 12 results, 36,000 chars', tokens: 9000, tool: 'terminal', text: '[arXiv API Atom feed, 36,000 chars]\n\n<entry><id>http://arxiv.org/abs/2405.00267v3</id><title>Differentially Private Release of Israel’s National Registry of Live Births</title> …\n<entry><id>http://arxiv.org/abs/2405.01716v2</id><title>ATTAXONOMY: Unpacking Differential Privacy Guarantees Against Practical Adversaries</title> …' },
   { role: 'assistant', title: 'Your 12 latest papers', tokens: 220, text: '• 2405.00267 — DP release of Israel’s live-births registry (v3)\n• 2405.01716 — ATTAXONOMY (v2)\n• …' },
-  { role: 'user', title: 'Download the two newest, summarize each', tokens: 30, text: 'Download the two newest and summarize each in 5 bullets.' },
-  { role: 'assistant', title: 'terminal: curl PDFs + pdftotext', tokens: 100, tool: 'terminal', text: 'tool_call: terminal(command="cd ~/papers && curl -sL https://arxiv.org/pdf/2405.00267 -o births.pdf && curl -sL https://arxiv.org/pdf/2405.01716 -o attaxonomy.pdf && pdftotext births.pdf && pdftotext attaxonomy.pdf && wc -c *.txt")' },
-  { role: 'tool', title: 'terminal → 2 PDFs converted', tokens: 60, tool: 'terminal', text: '131,204 births.txt\n118,770 attaxonomy.txt' },
-  { role: 'assistant', title: 'read_file births.txt', tokens: 40, tool: 'read_file', text: 'tool_call: read_file(path="~/papers/births.txt")' },
-  { role: 'tool', title: 'read_file → 100,000 chars [CAPPED]', tokens: 25000, tool: 'read_file', text: '[births.txt — 131,204 chars; read_file returns the first 100,000 (file_read_max_chars). The rest needs a second call with an offset.]\n\nDifferentially Private Release of Israel’s National Registry of Live Births\n\nAbstract. In February 2024, Israel’s Ministry of Health released …' },
-  { role: 'assistant', title: 'read_file attaxonomy.txt', tokens: 40, tool: 'read_file', text: 'tool_call: read_file(path="~/papers/attaxonomy.txt")' },
-  { role: 'tool', title: 'read_file → 100,000 chars [CAPPED]', tokens: 25000, tool: 'read_file', text: '[attaxonomy.txt — 118,770 chars; first 100,000 returned.]\n\nATTAXONOMY: Unpacking Differential Privacy Guarantees Against Practical Adversaries\n\nAbstract. …' },
-  { role: 'assistant', title: 'Two summaries (5 bullets each)', tokens: 600, text: 'Live births (2405.00267)\n• First national DP release in Israel …\n• epsilon chosen by …\n…\n\nATTAXONOMY (2405.01716)\n• A taxonomy of adversaries …\n…' },
-  { role: 'user', title: '/llm-wiki ingest the births paper', tokens: 5100, kind: 'skillcmd', text: '/llm-wiki ingest ~/papers/births.txt into my wiki\n\n[IMPORTANT: The user has invoked the "llm-wiki" skill, indicating they want you to follow its instructions. The full skill content is loaded below.]\n\n# llm-wiki\n[SKILL.md — 20,121 chars. A skill slash command puts the whole skill body INSIDE your user message.]' },
-  { role: 'assistant', title: 'write_file wiki page + patch index', tokens: 120, tool: 'write_file', text: 'tool_call: write_file(path="~/wiki/sources/births-2405.00267.md", content=…)\ntool_call: patch(path="~/wiki/index.md", …)' },
-  { role: 'tool', title: 'write_file → ok', tokens: 40, tool: 'write_file', text: 'Wrote 6,212 chars to ~/wiki/sources/births-2405.00267.md' },
-  { role: 'tool', title: 'patch → ok', tokens: 40, tool: 'patch', text: 'Applied 1 hunk to ~/wiki/index.md' },
-  { role: 'assistant', title: 'Ingested; wiki updated', tokens: 150, text: '• Added sources/births-2405.00267.md (claims, epsilon choice, caveats)\n• Linked from index.md and concepts/epsilon.md\n• Open ~/wiki in Obsidian to browse' },
+  { role: 'user', title: '/llm-wiki ingest my whole reading folder', tokens: 5100, kind: 'skillcmd', text: '/llm-wiki ingest every PDF in ~/phd/reading (60 files) into my wiki\n\n[IMPORTANT: The user has invoked the "llm-wiki" skill, indicating they want you to follow its instructions. The full skill content is loaded below.]\n\n# llm-wiki\n[SKILL.md — 20,121 chars. A skill slash command puts the whole skill body INSIDE your user message.]' },
+  { role: 'assistant', title: 'terminal: pdftotext for 60 PDFs', tokens: 90, tool: 'terminal', text: 'tool_call: terminal(command="cd ~/phd/reading && for f in *.pdf; do pdftotext \"$f\"; done && wc -c *.txt | sort -n")' },
+  { role: 'tool', title: 'terminal → 60 files converted', tokens: 600, tool: 'terminal', text: '  36,412 p01.txt\n  41,088 p02.txt\n …\n 184,220 p60.txt\n4,061,540 total' }
+].concat(readingBatch()).concat([
+  { role: 'assistant', title: 'Ingested 60 papers; wiki index rebuilt', tokens: 250, text: '• 60 source pages under ~/wiki/sources/\n• 14 concept pages updated (epsilon, unit of privacy, composition, …)\n• index.md rebuilt; 9 contradictions flagged in log.md' },
   { role: 'user', title: 'Meetings today? Tasks due?', tokens: 30, text: 'What meetings do I have today, and which tasks are due?' },
   { role: 'assistant', title: 'mcp__calendar__list_events + mcp__tasks__list', tokens: 120, tool: 'mcp', text: 'tool_call: mcp__calendar__list_events(date="2026-10-16")\ntool_call: mcp__tasks__list(filter="due:today")\n\n[two independent calls, issued in parallel]' },
   { role: 'tool', title: 'mcp__calendar__list_events → 4 events', tokens: 1100, tool: 'mcp__calendar__list_events', text: '10:00–11:00 Supervisor meeting (Geb. 50.34, R 252)\n12:00–13:00 Lunch with the DP reading group\n14:00–15:30 Seminar: Privacy in ML\n16:00–16:30 Call: PETS 2027 program committee' },
@@ -364,7 +376,7 @@ var SCRIPT = [
   { role: 'tool', title: 'mcp__tasks__create → created', tokens: 50, tool: 'mcp__tasks__create', text: 'Created task #4821 “Book the Lisbon trip (PETS 2027)”, due 2026-10-23.' },
   { role: 'tool', title: 'memory → saved (USER.md 584/1,375 chars)', tokens: 30, tool: 'memory', kind: 'memory', memChars: 70, text: 'Write saved. USER.md at 584/1,375 chars.' },
   { role: 'assistant', title: 'Done: task added, preference saved', tokens: 100, text: '• Task #4821 added, due Friday\n• Saved: trains under 8 h\n• Anything else before your 10:00?' }
-];
+]);
 
 /* =====================================================================
    HERMES RULES (agent/context_compressor.py @ 7520c4e8)
@@ -586,11 +598,12 @@ function visibleTokens(segs) { return segs.length ? segs[segs.length - 1].end : 
 
 /* ---------- grid ---------- */
 var gridEl = document.getElementById('grid');
-for (var i = 0; i < 100; i++) { var c = document.createElement('div'); c.className = 'cell'; gridEl.appendChild(c); }
+var CELLS = 500;   // Hermes's /context draws 100 cells (one per percent); five times finer here so the small parts show
+for (var i = 0; i < CELLS; i++) { var c = document.createElement('div'); c.className = 'cell'; gridEl.appendChild(c); }
 function paintGrid(segs) {
-  var W = state.W, cells = gridEl.children, per = W / 100, trigCell = Math.min(99, Math.floor(ui.sim.thr / W * 100));
+  var W = state.W, cells = gridEl.children, per = W / CELLS, trigCell = Math.min(CELLS - 1, Math.floor(ui.sim.thr / W * CELLS));
   var hiId = ui.sel || ui.hov, hiSeg = hiId ? segs.filter(function (s) { return s.id === hiId; })[0] : null;
-  for (var i = 0; i < 100; i++) {
+  for (var i = 0; i < CELLS; i++) {
     var lo = i * per, hi = lo + per, best = null, bestOv = 0, filled = 0, touched = false;
     for (var k = 0; k < segs.length; k++) {
       var s = segs[k]; if (s.end <= lo) continue; if (s.start >= hi) break;
@@ -721,6 +734,7 @@ function takeaway() {
   var lastC = ui.sim.compactions[ui.sim.compactions.length - 1];
   if (lastC && lastC.forced && ui.tick === lastCompactTick()) return 'You ran /compress: the same four phases Hermes runs automatically, on demand. Old tool outputs became stubs, the middle became one summary row, the newest rows survived verbatim, and the system prompt was rebuilt: USER.md now includes what the agent saved, and a compaction note was added.';
   if (ui.sim.skipped && ui.sim.total > W) return 'The prompt is now larger than the window. Hermes tried to compact at ' + fmtK(ui.sim.thr) + ' but the protected head (3 rows) and tail (at least 8 rows) covered every row, so there was nothing to cut. A real provider would reject this call; Hermes needs a few more rows before it can fold anything.';
+  if (step >= 0 && ui.sim.total >= ui.sim.thr && !(ui.sim.count && ui.tick === lastCompactTick())) return 'The prompt is now past the trigger' + (ui.sim.total > W ? ', even past the window' : '') + ': tool results are appended as they land, and Hermes compacts before the NEXT model call, not when a result arrives. Press Next.';
   if (ui.sim.count && ui.tick === lastCompactTick()) return 'Compaction did not wait for the window to be full: Hermes fires it when the prompt reaches ' + fmtK(ui.sim.thr) + ' tokens (' + Math.round(ui.sim.thr / W * 100) + '% of ' + fmtK(W) + '). Old tool outputs became stubs, the middle became one summary row, the newest rows survived verbatim, and the system prompt was rebuilt: USER.md now includes what the agent saved, and a compaction note was added.';
   if (step < 0) {
     var r = BOOT_ROWS[ui.tick];
@@ -736,10 +750,12 @@ function takeaway() {
   if (src.kind === 'subagent') return 'Each subagent read about 30K tokens of pages in its own window. Only its report (about 500 tokens) entered this one. Delegation is how an agent keeps large reads out of its context (Part 6).';
   if (src.kind === 'skill') return 'A skill’s full SKILL.md enters the window only when Hermes calls skill_view. The index in the system prompt is just names and one-liners (Part 5).';
   if (src.kind === 'skillcmd') return 'A skill slash command (/llm-wiki …) pastes the whole SKILL.md into your user message: 20,000 chars you never see. Skills are procedures, and procedures are long.';
+  if (src.batch && src.tool === 'read_file') return 'Batch work fills the window fastest: five parallel read_file calls land up to 125K tokens in one round, re-sent on every call from then on. This is the request that reaches even a 1M trigger.';
+  if (src.batch && src.tool === 'write_file') return 'The wiki pages are on disk now. That is llm-wiki’s point (Part 5): compile once; the context may forget the paper text, the wiki keeps the knowledge.';
   if (src.tool === 'mcp' || /^mcp__/.test(src.tool || '')) return 'MCP tool calls look like any other tool call to the model. The calendar result is personal data from colleagues, which is why Part 8 insists on KIT’s local models.';
-  if (atEnd() && !ui.sim.count) return 'At ' + fmtK(W) + ' the trigger is ' + fmtK(ui.sim.thr) + ' tokens and this day never reached it. Cap the window at 128K (what Hermes’s model.context_length setting does) and replay to watch auto-compaction fire mid-session.';
+  if (atEnd() && !ui.sim.count) return 'At ' + fmtK(W) + ' the trigger is ' + fmtK(ui.sim.thr) + ' tokens and this day never reached it.';
   if (atEnd() && lastC && lastC.forced) return 'Session over: auto-compaction never fired at ' + fmtK(W) + ' (trigger ' + fmtK(ui.sim.thr) + '); your /compress did the same work on demand. Cap the window at 128K and replay to watch it fire by itself.';
-  if (atEnd()) return 'Session over: Hermes compacted ' + ui.sim.count + '× under a ' + fmtK(W) + ' window. With DeepSeek V4 Flash’s native 1M the same day never reaches the 500K trigger; capped at 64K it compacts repeatedly. Switch the window above and replay.';
+  if (atEnd()) return 'Session over: Hermes compacted ' + ui.sim.count + '× under a ' + fmtK(W) + ' window, all of it during the 60-paper ingest. Switch the window above and replay: at 1M it compacts twice, capped at 128K fifteen times.';
   if (src.role === 'tool' && src.tokens >= 9000) return 'Tool results dominate. Each one lands in the window and stays there, re-sent on every call. Hermes caps a single read_file or web_extract at 100,000 chars and terminal output at 50,000.';
   if (src.role === 'user') return 'A new request adds to the same window. Everything from earlier today is still in it, and still re-sent.';
   return 'Every call re-sends the whole window: prefix plus the full history so far. Hover a row to see where it sits.';
@@ -760,7 +776,7 @@ function renderDetail(segs) {
   html += '<div class="box take"><div class="k">Key point</div>' + takeaway() + '</div>';
   detailEl.innerHTML = html;
 }
-var SUMMARY_PREVIEW = '[CONTEXT COMPACTION — REFERENCE ONLY]\nThe following is an automated summary of earlier conversation that was compressed to save context space. Treat it as background reference only.\n\n## Task\nPersonal-assistant day: DP news, user’s arXiv papers (2405.00267, 2405.01716) downloaded and summarized, births paper ingested into ~/wiki …\n## Key Decisions\n…\n## Anchor Index (mechanically extracted, exact)\n~/papers/births.txt · ~/wiki/sources/births-2405.00267.md · https://csrc.nist.gov/pubs/sp/800/226/final …\n## User Messages (verbatim, newest first)\n…\n## Context Recovery\nFull transcript remains searchable via session_search(…)\n--- END OF CONTEXT SUMMARY ---';
+var SUMMARY_PREVIEW = '[CONTEXT COMPACTION — REFERENCE ONLY]\nThe following is an automated summary of earlier conversation that was compressed to save context space. Treat it as background reference only.\n\n## Task\nPersonal-assistant day: DP news, user’s arXiv papers (2405.00267, 2405.01716), /llm-wiki ingest of ~/phd/reading (60 PDFs) into ~/wiki, in progress …\n## Key Decisions\n…\n## Anchor Index (mechanically extracted, exact)\n~/phd/reading/p01.txt … ~/wiki/sources/p25.md · https://csrc.nist.gov/pubs/sp/800/226/final …\n## User Messages (verbatim, newest first)\n…\n## Context Recovery\nFull transcript remains searchable via session_search(…)\n--- END OF CONTEXT SUMMARY ---';
 
 /* ---------- readout + controls ---------- */
 var roBig = document.getElementById('roBig'), roSub = document.getElementById('roSub'), statusEl = document.getElementById('status');
@@ -790,7 +806,7 @@ function advance() {   // one tick forward; passes a gate if one is pending
   render();
   if (ui.playing) {
     if (pendingGate() || (ui.sim.count && ui.tick === lastCompactTick())) stop();   // pause at gates and right after a compaction
-    else ui.timer = setTimeout(advance, tickToStep(ui.tick) < 0 ? 260 : 650);
+    else { var nx = SCRIPT[tickToStep(ui.tick) + 1]; ui.timer = setTimeout(advance, tickToStep(ui.tick) < 0 ? 260 : nx && nx.batch ? (nx.role === 'tool' ? 220 : 450) : nx && nx.role === 'tool' ? 450 : 650); }
   }
 }
 function stop() { ui.playing = false; clearTimeout(ui.timer); render(); }
