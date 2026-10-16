@@ -93,8 +93,9 @@ Researcher in a privacy group. Topic: differential privacy in practice
   `myprovider.deepseek-v4-flash` resolves the same way unless the endpoint
   reports a window); the smaller
   values stand for the `model.context_length` cap in Hermes's config. At 1M
-  the day never reaches the 500K trigger, so a `/compress` gate is offered at
-  the end; at 200K the 10-paper summary triggers auto-compaction once, at
+  the day never reaches the 500K trigger, so right after the summaries the
+  page offers `/compress` with a note, and the day continues on the compacted
+  context; at 200K the 10-paper summary triggers auto-compaction once, at
   128K twice; at 64K the breaker trips.
 - Deep links: `?window=200000&step=27` (step is 1-based; `step=0` shows the
   loaded prefix).
@@ -172,7 +173,7 @@ which the reads are about 170,000):
 | 64,000 | 54,400 (85% cap) | 2, then the breaker trips | a round of five reads does not fit |
 | 128,000 | 96,000 (75%) | 2 | steps 20 and 27 |
 | 200,000 | 150,000 (75%) | 1 | step 27 (189K → 49K) |
-| 1,000,000 | 500,000 (50%) | 0 | never; `/compress` offered at the end (193K → 6K) |
+| 1,000,000 | 500,000 (50%) | 0 | never; `/compress` offered after the summaries (190K → 5K) |
 
 ## Sources
 

@@ -120,8 +120,9 @@
   .ev .mini { height: 5px; border-radius: 3px; background: var(--c-free); overflow: hidden; }
   .ev .mini i { display: block; height: 100%; background: var(--c); opacity: .75; }
   @keyframes fadein { from { opacity: 0; transform: translateY(-3px); } to { opacity: 1; transform: none; } }
-  .gate { margin: 10px 2px 4px; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--c-user); background: color-mix(in srgb, var(--c-user) 12%, transparent); display: flex; gap: 10px; align-items: center; animation: fadein .3s ease-out; }
-  .gate.cmp { border-color: var(--c-summary); background: color-mix(in srgb, var(--c-summary) 12%, transparent); }
+  .gate { margin: 10px 2px 4px; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--c-user); background: color-mix(in srgb, var(--c-user) 12%, transparent); display: flex; gap: 10px; align-items: center; }
+  .gate.cmp { border-color: var(--c-summary); background: color-mix(in srgb, var(--c-summary) 12%, transparent); flex-wrap: wrap; }
+  .gate .gnote { flex-basis: 100%; font-size: .76rem; color: var(--text-dim); }
   .gate .who { font-size: .62rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--text-dim); white-space: nowrap; }
   .gate .txt { flex: 1; min-width: 0; font-family: var(--font-mono); font-size: .8rem; }
   .gate .txt::before { content: '❯ '; color: var(--c-user); }
@@ -469,8 +470,15 @@ function compress(msgs, W, compressionCount, log) {
 function simulate(st) {
   var msgs = [], compactions = [], events = [], memExtra = 0, memSynced = 0, count = 0, ineffective = 0, tripped = false, trippedStep = -1, skipped = null;
   var thr = thresholdTokens(st.W, st.p);
+  function manual(i) {   // the user ran /compress just before step i
+    if (!msgs.length || tripped) return;
+    var clf = [], resf = compress(msgs, st.W, count, clf);
+    if (resf) { msgs = resf; count++; skipped = null; memSynced = memExtra; var infof = clf[0]; infof.step = i; infof.forced = true; infof.atGate = true; infof.trigger = thr; compactions.push(infof);
+      events.push({ step: i, cmp: true, text: '/compress: ' + fmt(infof.before) + ' → ' + fmt(infof.after) + ' history tokens' }); }
+  }
   for (var i = 0; i <= st.step && i < SCRIPT.length; i++) {
     var src = SCRIPT[i];
+    if (st.forcedStep === i) manual(i);
     if (src.role === 'assistant') {
       // before each model call: preflight compaction gate, then the call itself
       var pre = prefix(st, memSynced, count > 0);
@@ -501,6 +509,7 @@ function simulate(st) {
       if (src.role === 'tool' && src.kind === 'memory') memExtra += (src.memChars || 0); // written to disk, not to the prompt
     }
   }
+  if (st.forcedStep === st.step + 1) manual(st.forcedStep);
   if (st.finalCompress && msgs.length) {
     var cl2 = [], res2 = compress(msgs, st.W, count, cl2);
     if (res2) { msgs = res2; count++; memSynced = memExtra; var info2 = cl2[0]; info2.step = SCRIPT.length; info2.forced = true; info2.trigger = thr; compactions.push(info2);
@@ -529,7 +538,8 @@ var CATS = {
 };
 var BOOT_ROWS = PREFIX_ROWS.filter(function (r) { return !r.onlyCompacted; });
 var TOTAL_TICKS = BOOT_ROWS.length + SCRIPT.length;   // tick = prefix rows loading one by one, then session steps
-var ui = { tick: -1, playing: false, timer: null, sel: null, hov: null, hovCat: null, sim: null, ended: false, scrolledTick: null };
+var ui = { tick: -1, playing: false, timer: null, sel: null, hov: null, hovCat: null, sim: null, ended: false, compressed: false, scrolledTick: null };
+var COMPRESS_GATE_STEP = SCRIPT.map(function (s) { return s.title; }).indexOf('Plan my trip to PETS 2027 with 3 subagents');
 state.step = -1;
 
 function tickToStep(t) { return t - BOOT_ROWS.length; }
@@ -537,6 +547,7 @@ function isGateStep(step) { return step >= 0 && step < SCRIPT.length && SCRIPT[s
 function pendingGate() {   // the step the user must "type" before the timeline continues
   var next = tickToStep(ui.tick) + 1;
   if (ui.sim && ui.sim.tripped) return null;
+  if (next === COMPRESS_GATE_STEP && !ui.compressed && ui.sim && ui.sim.count === 0) return { kind: 'compress', text: '/compress', mid: true };
   if (isGateStep(next)) return { kind: 'prompt', step: next, text: SCRIPT[next].text };
   if (next >= SCRIPT.length && !ui.ended && ui.sim && ui.sim.count === 0) return { kind: 'compress', text: '/compress' };
   return null;
@@ -646,7 +657,7 @@ function renderTimeline(segs) {
   var g = pendingGate();
   if (g) {
     var d = document.createElement('div'); d.className = 'gate' + (g.kind === 'compress' ? ' cmp' : '');
-    d.innerHTML = '<span class="who">' + (g.kind === 'compress' ? 'You run' : 'You type') + '</span><span class="txt">' + esc(g.text) + '<span class="cur"></span></span>';
+    d.innerHTML = (g.mid ? '<div class="gnote">The window is at ' + Math.round(ui.sim.total / state.W * 100) + '% of ' + fmtK(state.W) + '; Hermes would wait for ' + fmtK(ui.sim.thr) + '. Compact by hand to see what it does.</div>' : '') + '<span class="who">' + (g.kind === 'compress' ? 'You run' : 'You type') + '</span><span class="txt">' + esc(g.text) + '<span class="cur"></span></span>';
     var btn = document.createElement('button'); btn.className = 'btn primary'; btn.textContent = g.kind === 'compress' ? 'Run ↵' : 'Send ↵';
     btn.addEventListener('click', advance); d.appendChild(btn); tlEl.appendChild(d);
   } else if (atEnd()) {
@@ -655,7 +666,7 @@ function renderTimeline(segs) {
   }
   if (ui.scrolledTick !== ui.tick) { ui.scrolledTick = ui.tick; tlEl.scrollTop = ui.sim.count && ui.tick === lastCompactTick() ? 0 : tlEl.scrollHeight; }
 }
-function lastCompactTick() { var c = ui.sim.compactions[ui.sim.compactions.length - 1]; return c ? Math.min(c.step + BOOT_ROWS.length, TOTAL_TICKS - 1) : -1; }
+function lastCompactTick() { var c = ui.sim.compactions[ui.sim.compactions.length - 1]; return c ? Math.min(c.step + BOOT_ROWS.length - (c.atGate ? 1 : 0), TOTAL_TICKS - 1) : -1; }
 function esc(s) { return s.replace(/&/g, '&amp;').replace(/</g, '&lt;'); }
 
 /* ---------- detail pane ---------- */
@@ -694,7 +705,7 @@ function takeaway() {
   if (ui.tick < 0) return 'Nothing in the window yet. Press Start.';
   var lastC = ui.sim.compactions[ui.sim.compactions.length - 1];
   if (ui.sim.tripped) return 'A round of five reads is bigger than this window and the protected tail keeps whole rounds, so two compactions in a row stayed over the trigger. Hermes’s anti-thrash breaker switched auto-compaction off; every call now overflows.';
-  if (lastC && lastC.forced && ui.tick === lastCompactTick()) return 'You ran /compress: the same four phases, on demand. Old tool outputs → stubs, the middle → one summary row, newest rows kept, prompt rebuilt with USER.md re-read.';
+  if (lastC && lastC.forced && ui.tick === lastCompactTick()) return 'You ran /compress: the same four phases auto-compaction runs, on demand. Old tool outputs → stubs, the middle → one summary row, newest rows kept, prompt rebuilt with USER.md re-read. The day goes on from here.';
   if (ui.sim.skipped && ui.sim.total > W) return 'Over the window and nothing to cut: the protected head and tail cover every row. A real provider would reject this call.';
   if (step >= 0 && ui.sim.total >= ui.sim.thr && !(ui.sim.count && ui.tick === lastCompactTick())) return 'Past the trigger' + (ui.sim.total > W ? ', even past the window' : '') + '. Results are appended as they land; Hermes compacts before the next model call. Press Next.';
   if (ui.sim.count && ui.tick === lastCompactTick()) return 'Fired at ' + fmtK(ui.sim.thr) + ' (' + Math.round(ui.sim.thr / W * 100) + '% of ' + fmtK(W) + '), not at 100%. Old tool outputs → stubs, the middle → one summary row, newest rows kept verbatim, prompt rebuilt with USER.md re-read.';
@@ -712,7 +723,7 @@ function takeaway() {
   if (src.batch && src.tool === 'read_file') return 'Five parallel reads land up to 125K tokens at once and stay, re-sent on every call. Reading files is what fills a window fastest.';
   if (src.batch && src.role === 'assistant' && !src.tool) return 'The summaries are small; the reads are what fill the window.';
   if (atEnd() && !ui.sim.count) return 'Trigger ' + fmtK(ui.sim.thr) + ' never reached.';
-  if (atEnd() && lastC && lastC.forced) return 'Auto-compaction never fired at ' + fmtK(W) + '; your /compress did the same work. Cap at 128K and replay to see it fire by itself.';
+  if (atEnd() && lastC && lastC.forced) return 'Auto-compaction never fired at ' + fmtK(W) + '; your /compress did the same work. Cap at 200K and replay to see it fire by itself.';
   if (atEnd()) return 'Compacted ' + ui.sim.count + '× under ' + fmtK(W) + ', all during the 10-paper job. Switch the window and replay.';
   if (src.role === 'tool' && src.tokens >= 9000) return 'Tool results dominate: each stays in the window, re-sent on every call. read_file and web_extract cap at 100,000 chars, terminal at 50,000.';
   if (src.role === 'user') return 'A new request adds to the same window; everything from before is still in it.';
@@ -759,6 +770,7 @@ function render() {
 }
 function advance() {   // one tick forward; passes a gate if one is pending
   var g = pendingGate();
+  if (g && g.kind === 'compress' && g.mid) { ui.compressed = true; state.forcedStep = COMPRESS_GATE_STEP; ui.scrolledTick = null; stop(); render(); return; }
   if (g && g.kind === 'compress') { ui.ended = true; ui.scrolledTick = null; stop(); render(); return; }
   if (ui.tick >= TOTAL_TICKS - 1) { stop(); render(); return; }
   ui.tick++; ui.sel = null;
@@ -770,11 +782,12 @@ function advance() {   // one tick forward; passes a gate if one is pending
 }
 function stop() { ui.playing = false; clearTimeout(ui.timer); render(); }
 function play() { if (atEnd()) return reset(true); ui.playing = true; render(); ui.timer = setTimeout(advance, 150); }
-function reset(andPlay) { stop(); ui.tick = -1; ui.sel = null; ui.hov = null; ui.ended = false; render(); if (andPlay) play(); }
+function reset(andPlay) { stop(); ui.tick = -1; ui.sel = null; ui.hov = null; ui.ended = false; ui.compressed = false; state.forcedStep = -1; render(); if (andPlay) play(); }
 btnPlay.addEventListener('click', function () { if (ui.playing) stop(); else play(); });
 btnNext.addEventListener('click', function () { stop(); advance(); });
 btnReset.addEventListener('click', function () { reset(false); });
 document.getElementById('winSel').addEventListener('change', function (e) { state.W = +e.target.value; ui.ended = false; render(); });
+state.forcedStep = -1;
 addEventListener('keydown', function (e) {
   if (/INPUT|SELECT|TEXTAREA|BUTTON/.test(e.target.tagName)) return;
   if (e.code === 'Space') { e.preventDefault(); if (ui.playing) stop(); else play(); }
