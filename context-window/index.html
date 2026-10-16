@@ -81,8 +81,10 @@
 
   /* the window: 100 cells, one per 1% */
   .ctxgrid { display: grid; grid-template-columns: repeat(50, 1fr); gap: 2px; width: 100%; }
-  .cell { background: var(--c-free); border-radius: 2px; aspect-ratio: 1; position: relative;
-    transition: background .35s ease, opacity .25s, outline-color .2s; outline: 1.5px solid transparent; outline-offset: -1px; }
+  .cell { background: var(--c-free); border-radius: 2px; aspect-ratio: 1; position: relative; overflow: hidden;
+    transition: opacity .25s, outline-color .2s; outline: 1.5px solid transparent; outline-offset: -1px; }
+  .cell i { display: block; position: absolute; left: 0; top: 0; bottom: 0; width: 0; background: var(--c-free);
+    transition: width .3s ease, background-color .35s ease; }
   .cell.zone::after { content: ''; position: absolute; inset: 0; border-radius: 2px;
     background: repeating-linear-gradient(135deg, transparent 0 3px, rgba(255,107,107,.3) 3px 5px); pointer-events: none; }
   .cell.trig { outline-color: var(--danger); }
@@ -572,7 +574,7 @@ function visibleTokens(segs) { return segs.length ? segs[segs.length - 1].end : 
 /* ---------- grid ---------- */
 var gridEl = document.getElementById('grid');
 var CELLS = 500;   // Hermes's /context draws 100 cells (one per percent); five times finer here so the small parts show
-for (var i = 0; i < CELLS; i++) { var c = document.createElement('div'); c.className = 'cell'; gridEl.appendChild(c); }
+for (var i = 0; i < CELLS; i++) { var c = document.createElement('div'); c.className = 'cell'; c.appendChild(document.createElement('i')); gridEl.appendChild(c); }
 function paintGrid(segs) {
   var W = state.W, cells = gridEl.children, per = W / CELLS, trigCell = Math.min(CELLS - 1, Math.floor(ui.sim.thr / W * CELLS));
   var hiId = ui.sel || ui.hov, hiSeg = hiId ? segs.filter(function (s) { return s.id === hiId; })[0] : null;
@@ -589,9 +591,10 @@ function paintGrid(segs) {
     if (hiSeg) cls += touched ? ' hi' : ' dim';
     else if (ui.hovCat) cls += (best && best.cat === ui.hovCat) ? ' hi' : ' dim';
     el.className = cls;
-    if (!best) { el.style.background = ''; el.title = ''; continue; }
-    var col = CATS[best.cat].sw, frac = Math.round(filled / per * 100);
-    el.style.background = frac >= 99 ? col : 'linear-gradient(90deg, ' + col + ' ' + frac + '%, var(--c-free) ' + frac + '%)';
+    var bar = el.firstChild;
+    if (!best) { bar.style.width = '0'; el.title = ''; continue; }
+    var col = CATS[best.cat].sw, frac = Math.min(100, Math.round(filled / per * 100));
+    bar.style.background = col; bar.style.width = frac + '%';
     el.title = CATS[best.cat].label + ' · ' + fmtK(lo) + '–' + fmtK(hi);
   }
 }
