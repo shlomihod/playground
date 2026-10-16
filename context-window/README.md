@@ -1,8 +1,8 @@
 # Context window demo
 
 One visual for teaching the **context window of an agent**, with
-[Hermes Agent](https://github.com/NousResearch/hermes-agent) (Nous Research) as
-the worked instance. A 100-cell grid (one cell = 1% of the window, the same
+[Hermes Agent](https://github.com/NousResearch/hermes-agent) (Nous Research)
+running DeepSeek V4 Flash as the worked instance. A 100-cell grid (one cell = 1% of the window, the same
 metaphor as Hermes's own `/context` command) fills as a session plays: what
 loads before the user types, what each tool call adds, and what compaction
 throws away. The shape follows Anthropic's
@@ -24,10 +24,12 @@ demos. Listed on the hub like the other main demos.
 - **Next** steps one event at a time; `→` and `space` do the same.
 - **Hover** a timeline row: its cells light up in the grid and the pane says
   what it is and what compaction will do (or did) to it. Click to pin.
-- **Context window** selector (64K, 128K, 200K, 1M): the same session replays
-  under a different window. At 200K auto-compaction fires once, late; at 128K
-  once, mid-session; at 64K five times; at 1M never, so a `/compress` gate is
-  offered at the end instead.
+- **Context window** selector (1M, 200K, 128K, 64K): the same session replays
+  under a different window. 1M is the default, Hermes's own figure for
+  `deepseek-v4-flash`; the smaller values stand for the `model.context_length`
+  cap in Hermes's config. At 1M auto-compaction never fires, so a `/compress`
+  gate is offered at the end; at 200K it fires once, late; at 128K once,
+  mid-session; at 64K five times.
 - Deep links: `?window=128000&step=19` (step is 1-based; `step=0` shows the
   loaded prefix).
 
@@ -55,6 +57,10 @@ demos. Listed on the hub like the other main demos.
 | Memory caps | MEMORY.md 2,200 chars, USER.md 1,375 chars, frozen snapshot per session | `cli-config.yaml.example` L1005-1007; `tools/memory_tool_store.py` L618-644 |
 | Tool output caps | terminal 50,000 chars (keep first 40% / last 60%); read_file 100,000 chars | `tools/tool_output_limits.py` L13-15; `tools/file_tools.py` L52 |
 | Minimum window | 64,000 tokens | `model_metadata.py` L272; docs quickstart |
+| Window for `deepseek-v4-flash` | 1,000,000 tokens (DeepSeek native endpoint) | `model_metadata.py` L314 |
+| `model.context_length` config cap | caps the detected window | `cli-config.yaml.example` L135-145 |
+| Status-bar model label | model id, reverse-aliased, split on `/`, truncated at 26 chars | `hermes_cli/cli_status_bar_mixin.py` L196-207 |
+| Session tools | `read_file`, `search_files`, `patch`, `terminal`, `skill_view`, `memory`, `delegate_task`, `web_search`, `web_extract` are registered Hermes tools | `tools/file_tools.py` L1395-1420, `terminal_tool.py` L1631, `skills_tool.py` L746, `memory_tool.py` L477, `delegate_tool.py` L800, `web_tools.py` L560-566 |
 | Token estimator | 4 chars per token (ASCII) | `model_metadata.py` L2374 |
 | `/context` grid and categories | 20x5 cells; system_prompt, tool_definitions, rules, skills, mcp, subagent_definitions, memory, conversation | `agent/context_breakdown.py` L36-56 |
 | Status-bar bands | green < 50%, yellow 50-80%, orange > 80%, red >= 95% | `hermes_cli/cli_status_bar_mixin.py` L49-52; docs CLI guide |

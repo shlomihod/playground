@@ -169,16 +169,16 @@
 <body>
 <button id="theme-toggle" class="theme-toggle" aria-label="Toggle color theme"></button>
 <h1>Context Window</h1>
-<p class="subtitle">Everything an agent &ldquo;knows&rdquo; right now has to fit in one request. Watch <b>Hermes Agent</b>&rsquo;s window fill up before you type, grow with every tool call, and get compacted.</p>
+<p class="subtitle">Everything an agent &ldquo;knows&rdquo; right now has to fit in one request. Watch <b>Hermes Agent</b>&rsquo;s window (here running <b>DeepSeek V4 Flash</b>) fill up before you type, grow with every tool call, and get compacted.</p>
 
 <div class="card">
   <div class="top">
-    <label class="ctl">Context window
+    <label class="ctl" title="Hermes reads the window from its model table (deepseek-v4-flash: 1,000,000). A smaller value is the model.context_length cap you can set in Hermes's config.">Context window
       <select id="winSel">
+        <option value="1000000" selected>1M (DeepSeek V4 Flash, native)</option>
+        <option value="200000">200K (context_length cap)</option>
+        <option value="128000">128K (context_length cap)</option>
         <option value="64000">64K (Hermes minimum)</option>
-        <option value="128000">128K (DeepSeek / Llama / Qwen class)</option>
-        <option value="200000" selected>200K (Claude)</option>
-        <option value="1000000">1M (Claude 4.6+ / GPT-4.1 class)</option>
       </select>
     </label>
     <div class="readout"><div class="big" id="roBig">0<small>tokens</small></div><div class="sub" id="roSub"></div></div>
@@ -209,7 +209,7 @@
 <details class="src">
   <summary>What is real here, and sources</summary>
   <ul>
-    <li><b>Real:</b> what loads before you type and how big it is (measured from the <a href="https://github.com/NousResearch/hermes-agent" target="_blank" rel="noopener">hermes-agent</a> source at commit <code>7520c4e8</code>, 2026-10-15: identity and guidance text, the index of 58 bundled skills, 37 of the 51 core tool schemas, the repo&rsquo;s own <code>AGENTS.md</code> as the project-rules example); the compaction rules (threshold 50% floored to 75% under 512K, 64K minimum, protected head and tail, tool-output stubs, skill pruning, summary budget, memory reloaded when the system prompt is rebuilt); the 100-cell grid, status bar and colour bands of Hermes&rsquo;s own <code>/context</code> and CLI. Tokens are Hermes&rsquo;s own estimate: 4 characters &asymp; 1 token.</li>
+    <li><b>Real:</b> what loads before you type and how big it is (measured from the <a href="https://github.com/NousResearch/hermes-agent" target="_blank" rel="noopener">hermes-agent</a> source at commit <code>7520c4e8</code>, 2026-10-15: identity and guidance text, the index of 58 bundled skills, 37 of the 51 core tool schemas, the repo&rsquo;s own <code>AGENTS.md</code> as the project-rules example); the compaction rules (threshold 50% floored to 75% under 512K, 64K minimum, protected head and tail, tool-output stubs, skill pruning, summary budget, memory reloaded when the system prompt is rebuilt); the 100-cell grid, status bar and colour bands of Hermes&rsquo;s own <code>/context</code> and CLI; the model: Hermes&rsquo;s model table gives <code>deepseek-v4-flash</code> a 1,000,000-token window, and the smaller windows in the selector are what its <code>model.context_length</code> config cap would make of it. The nine tools in the session (<code>read_file</code>, <code>search_files</code>, <code>terminal</code>, <code>patch</code>, <code>skill_view</code>, <code>memory</code>, <code>delegate_task</code>, <code>web_search</code>, <code>web_extract</code>) are Hermes&rsquo;s registered tools. Tokens are Hermes&rsquo;s own estimate: 4 characters &asymp; 1 token.</li>
     <li><b>Scripted:</b> the coding session itself. Its messages and token counts are illustrative, in the spirit of Anthropic&rsquo;s <a href="https://code.claude.com/docs/en/context-window" target="_blank" rel="noopener">Explore the context window</a> simulation for Claude Code, which inspired this page.</li>
     <li>Hermes docs: <a href="https://hermes-agent.nousresearch.com/docs/developer-guide/context-compression-and-caching" target="_blank" rel="noopener">Context Compression and Caching</a>, <a href="https://hermes-agent.nousresearch.com/docs/developer-guide/prompt-assembly" target="_blank" rel="noopener">Prompt Assembly</a>, <a href="https://hermes-agent.nousresearch.com/docs/user-guide/features/memory" target="_blank" rel="noopener">Persistent Memory</a>. Source file and line references are in this demo&rsquo;s README.</li>
   </ul>
@@ -268,7 +268,6 @@ var TOOLSETS = [
   { id: 'media', label: 'Media (vision, image, speech)', tokens: 659, n: 3, on: true },
   { id: 'ops', label: 'cronjob_manage + computer_use + manage_connections', tokens: 4159, n: 3, on: true }
 ];
-var SUBAGENT_TOKENS = 41000; // what the delegated sub-agent read in its OWN window (illustrative)
 
 // The scripted session. tokens are illustrative; caps are real: read_file 100,000 chars (25K tok), terminal 50,000 chars (12.5K tok).
 var SCRIPT = [
@@ -343,9 +342,9 @@ function summaryBudget(W, contentTokens) { return Math.max(MIN_SUMMARY_TOKENS, M
 
 /* ---------- state ---------- */
 var state = {
-  W: 200000, p: 0.50, step: -1,
+  W: 1000000, p: 0.50, step: -1,
   parts: { rules: true, skills: true, memory: true },
-  toolsets: {}, forced: {} // forced[stepIndex] = true => manual /compress before that step's call
+  toolsets: {}
 };
 TOOLSETS.forEach(function (t) { state.toolsets[t.id] = t.on; });
 
@@ -373,7 +372,7 @@ function groupStart(msgs, i) { // a tool result belongs to the assistant call be
   while (i > 0 && isToolResult(msgs[i])) i--;
   return i;
 }
-function compress(msgs, W, compressionCount, memChars, log) {
+function compress(msgs, W, compressionCount, log) {
   var headN = compressionCount === 0 ? PROTECT_FIRST_N : 0; // decays to 0 after the first compaction (L4647-4666)
   if (msgs.length <= headN + 3 + 1) return null;                 // Phase 0 size check (L5556-5562)
   // ---- Phase 2 boundaries: tail by token budget, aligned to tool groups, count floor, last user kept
@@ -439,61 +438,49 @@ function compress(msgs, W, compressionCount, memChars, log) {
 }
 
 function simulate(st) {
-  var msgs = [], calls = [], compactions = [], events = [], memExtra = 0, count = 0, prevWire = null, prevPrefix = null;
-  var sentTotal = 0, sentCached = 0, ineffective = 0, tripped = false;
+  var msgs = [], compactions = [], events = [], memExtra = 0, memSynced = 0, count = 0, ineffective = 0, tripped = false, skipped = null;
   var thr = thresholdTokens(st.W, st.p);
   for (var i = 0; i <= st.step && i < SCRIPT.length; i++) {
     var src = SCRIPT[i];
     if (src.role === 'assistant') {
       // before each model call: preflight compaction gate, then the call itself
-      var pre = prefix(st, memExtra, count > 0);
+      var pre = prefix(st, memSynced, count > 0);
       var hist = msgs.reduce(function (a, m) { return a + m.tokens; }, 0);
-      var forced = !!st.forced[i];
-      if (((pre.total + hist >= thr && !tripped) || forced) && msgs.length) {
+      if (pre.total + hist >= thr && !tripped && msgs.length) {
         var cl = [];
-        var res = compress(msgs, st.W, count, MEMORY.chars + memExtra, cl);
+        var res = compress(msgs, st.W, count, cl);
         if (res) {
-          msgs = res; count++;
-          var info = cl[0]; info.step = i; info.forced = forced; info.trigger = thr; info.prompt = pre.total + hist;
+          msgs = res; count++; skipped = null;
+          var info = cl[0]; info.step = i; info.forced = false; info.trigger = thr; info.prompt = pre.total + hist;
           compactions.push(info);
-          pre = prefix(st, memExtra, true); // system prompt rebuilt: compaction note + memory reloaded from disk
+          memSynced = memExtra;                       // system prompt rebuilt: memory re-read from disk
+          pre = prefix(st, memSynced, true);
           hist = msgs.reduce(function (a, m) { return a + m.tokens; }, 0);
           var still = pre.total + hist >= thr;
-          ineffective = still ? ineffective + 1 : 0;   // provider-confirmed "ineffective" strikes reset on a successful pass
-          events.push({ step: i, cmp: true, text: (forced ? '/compress' : 'auto-compaction #' + count) + ': ' + fmt(info.before) + ' → ' + fmt(info.after) + ' history tokens; ' + info.middleRows + ' rows → 1 summary (' + fmt(info.sumTok) + ' tok); ' + info.pruned + ' tool outputs stubbed' + (info.skills ? ', ' + info.skills + ' skill pruned' : '') + (info.demoted ? ', ' + info.demoted + ' tail outputs demoted' : '') + (still ? ' — still over the trigger (ineffective strike ' + ineffective + ')' : '') });
-          if (ineffective >= 2 && !tripped) { tripped = true; events.push({ step: i, cmp: true, text: 'anti-thrash breaker tripped after 2 ineffective compactions: auto-compaction is off until the session is reset (/new); the window keeps growing toward a provider overflow' }); }
-        } else if (forced) {
-          events.push({ step: i, cmp: false, text: '/compress: nothing to compact yet (the protected head and tail cover every row)' });
+          ineffective = still ? ineffective + 1 : 0;   // "ineffective" strikes reset on a successful pass
+          events.push({ step: i, cmp: true, text: 'auto-compaction #' + count + ': ' + fmt(info.before) + ' → ' + fmt(info.after) + ' history tokens' + (still ? ' — still over the trigger (ineffective strike ' + ineffective + ')' : '') });
+          if (ineffective >= 2 && !tripped) { tripped = true; events.push({ step: i, cmp: true, text: 'anti-thrash breaker tripped after 2 ineffective compactions' }); }
+        } else {
+          // Phase-0 size check failed: the protected head and tail cover every row, so nothing can be cut
+          skipped = { step: i, prompt: pre.total + hist };
+          events.push({ step: i, cmp: false, text: 'compaction skipped: head and tail cover every row' });
         }
       }
-      // cache accounting: Anthropic-style breakpoints — static system prefix, end of system, last 2 messages
-      var wireIds = msgs.map(function (m) { return m.id + ':' + m.status; });
-      var cached = 0;
-      if (prevWire) {
-        var samePrefix = prevPrefix && prevPrefix.total === pre.total;
-        cached += samePrefix ? pre.total : (pre.tools + SYSTEM_TOKENS); // stable tier + tools survive; rest re-rendered
-        var j = 0; while (j < wireIds.length && j < prevWire.length && wireIds[j] === prevWire[j]) { cached += msgs[j].tokens; j++; }
-      }
-      var total = pre.total + hist;
-      cached = Math.min(cached, total);
-      calls.push({ step: i, total: total, cached: cached, fresh: total - cached, prefix: pre });
-      sentTotal += total; sentCached += cached;
-      prevWire = wireIds; prevPrefix = pre;
       msgs.push(makeMsg(src, i));
     } else {
       msgs.push(makeMsg(src, i));
-      if (src.role === 'tool' && src.kind === 'memory') memExtra += MEMORY_WRITE_CHARS; // written to disk
+      if (src.role === 'tool' && src.kind === 'memory') memExtra += MEMORY_WRITE_CHARS; // written to disk, not to the prompt
     }
   }
   if (st.finalCompress && msgs.length) {
-    var cl2 = [], res2 = compress(msgs, st.W, count, MEMORY.chars + memExtra, cl2);
-    if (res2) { msgs = res2; count++; var info2 = cl2[0]; info2.step = SCRIPT.length; info2.forced = true; info2.trigger = thr; compactions.push(info2);
+    var cl2 = [], res2 = compress(msgs, st.W, count, cl2);
+    if (res2) { msgs = res2; count++; memSynced = memExtra; var info2 = cl2[0]; info2.step = SCRIPT.length; info2.forced = true; info2.trigger = thr; compactions.push(info2);
       events.push({ step: SCRIPT.length, cmp: true, text: '/compress: ' + fmt(info2.before) + ' → ' + fmt(info2.after) + ' history tokens' }); }
   }
-  var pre2 = prefix(st, memExtra, count > 0);
+  var pre2 = prefix(st, memSynced, count > 0);
   var hist2 = msgs.reduce(function (a, m) { return a + m.tokens; }, 0);
-  return { msgs: msgs, calls: calls, compactions: compactions, events: events, prefix: pre2, hist: hist2, total: pre2.total + hist2,
-    thr: thr, count: count, sentTotal: sentTotal, sentCached: sentCached, memExtra: memExtra, ineffective: ineffective, tripped: tripped };
+  return { msgs: msgs, compactions: compactions, events: events, prefix: pre2, hist: hist2, total: pre2.total + hist2,
+    thr: thr, count: count, memExtra: memExtra, ineffective: ineffective, tripped: tripped, skipped: skipped };
 }
 
 /* =====================================================================
@@ -519,7 +506,7 @@ var PREFIX_ROWS = [
   { id: 'memory', cat: 'memory', label: 'Memory (MEMORY.md + USER.md)', desc: 'Hermes’s curated notes about the project and about you, capped at 2,200 and 1,375 characters. A frozen snapshot: what is on disk at session start.', fate: 'Anything Hermes saves to memory mid-session lands on disk, not here. The window sees it only when the system prompt is rebuilt: after a compaction, or next session.' }
 ];
 var TOTAL_TICKS = PREFIX_ROWS.length + SCRIPT.length;   // tick = prefix rows, then session steps
-var ui = { tick: -1, playing: false, timer: null, sel: null, hov: null, hovCat: null, sim: null, ended: false };
+var ui = { tick: -1, playing: false, timer: null, sel: null, hov: null, hovCat: null, sim: null, ended: false, scrolledTick: null };
 state.step = -1;
 
 function tickToStep(t) { return t - PREFIX_ROWS.length; }
@@ -585,7 +572,7 @@ function statusHTML(used, W, count) {
   var p = Math.round(used / W * 100), filled = Math.min(10, Math.round(p / 10));
   var cls = p >= 95 ? 'critical' : p > 80 ? 'bad' : p >= 50 ? 'warn' : 'good';
   var bar = '[' + '█'.repeat(filled) + '░'.repeat(10 - filled) + ']';
-  return '☤ claude-opus-5-5<span class="sep">│</span>' + fmtK(used) + '/' + fmtK(W) + '<span class="sep">│</span><span class="' + cls + '"><span class="bar">' + bar + '</span> ' + p + '%</span>' +
+  return '☤ deepseek-v4-flash<span class="sep">│</span>' + fmtK(used) + '/' + fmtK(W) + '<span class="sep">│</span><span class="' + cls + '"><span class="bar">' + bar + '</span> ' + p + '%</span>' +
     (count ? '<span class="sep">│</span>🗜️ ' + count : '') + '<span class="sep" style="margin-left:auto"></span><span style="float:right">Hermes status bar</span>';
 }
 
@@ -640,7 +627,7 @@ function renderTimeline(segs) {
     var e = document.createElement('div'); e.className = 'phase'; e.textContent = 'Session complete · ' + (ui.sim.count ? 'compacted ' + ui.sim.count + '×' : 'never compacted') + ' · switch the window above and replay';
     tlEl.appendChild(e);
   }
-  if (!ui.sel) tlEl.scrollTop = ui.sim.count && ui.tick === lastCompactTick() ? 0 : tlEl.scrollHeight;
+  if (ui.scrolledTick !== ui.tick) { ui.scrolledTick = ui.tick; tlEl.scrollTop = ui.sim.count && ui.tick === lastCompactTick() ? 0 : tlEl.scrollHeight; }
 }
 function lastCompactTick() { var c = ui.sim.compactions[ui.sim.compactions.length - 1]; return c ? Math.min(c.step + PREFIX_ROWS.length, TOTAL_TICKS - 1) : -1; }
 function esc(s) { return s.replace(/&/g, '&amp;').replace(/</g, '&lt;'); }
@@ -679,6 +666,9 @@ function zoneOf(m) {
 function takeaway() {
   var step = tickToStep(ui.tick), W = state.W;
   if (ui.tick < 0) return 'Nothing is in the window yet. Press Start.';
+  var lastC = ui.sim.compactions[ui.sim.compactions.length - 1];
+  if (lastC && lastC.forced && ui.tick === lastCompactTick()) return 'You ran /compress: the same four phases Hermes runs automatically, on demand. Old tool outputs became stubs, the middle became one summary row, the newest rows survived verbatim, and the system prompt was rebuilt with memory re-read from disk.';
+  if (ui.sim.skipped && ui.sim.total > W) return 'The prompt is now larger than the window. Hermes tried to compact at ' + fmtK(ui.sim.thr) + ' but the protected head (3 rows) and tail (at least 8 rows) covered every row, so there was nothing to cut. A real provider would reject this call; Hermes needs a few more rows before it can fold anything.';
   if (ui.sim.count && ui.tick === lastCompactTick()) return 'Compaction did not wait for the window to be full: Hermes fires it when the prompt reaches ' + fmtK(ui.sim.thr) + ' tokens (' + Math.round(ui.sim.thr / W * 100) + '% of ' + fmtK(W) + '). Old tool outputs became stubs, the middle became one summary row, the newest rows survived verbatim, and the system prompt was rebuilt with memory re-read from disk.';
   if (step < 0) return 'A lot loads before you type anything: the system prompt, every tool schema, project rules, the skills index and memory. ' + fmtK(ui.sim.prefix.total) + ' tokens, and they are sent again on every call.';
   if (step === 0) return 'Your prompt is tiny next to what was already loaded. Most of the window is setup, not your words.';
@@ -686,8 +676,9 @@ function takeaway() {
   if (src.kind === 'memory') return 'Hermes saved a memory, but to disk. The system prompt was rendered at session start, so the window will see this note only after the prompt is rebuilt: at the next compaction, or next session.';
   if (src.kind === 'subagent') return 'The sub-agent read about 41K tokens of docs in its own window. Only its 480-token report entered this one. Delegation is how an agent keeps large reads out of its context.';
   if (src.kind === 'skill') return 'A skill’s full body enters the window only when Hermes calls skill_view. The index already in the system prompt is just names and one-liners.';
-  if (atEnd() && !ui.sim.count) return 'At ' + fmtK(W) + ' the trigger is ' + fmtK(ui.sim.thr) + ' tokens and this session never reached it. Switch the window to 128K and replay to watch auto-compaction fire mid-session.';
-  if (atEnd()) return 'Session over: Hermes compacted ' + ui.sim.count + '× under a ' + fmtK(W) + ' window. The same session at 1M never reaches its 500K trigger; at 64K it compacts five times. Switch the window above and replay.';
+  if (atEnd() && !ui.sim.count) return 'At ' + fmtK(W) + ' the trigger is ' + fmtK(ui.sim.thr) + ' tokens and this session never reached it. Cap the window at 128K (what Hermes’s model.context_length setting does) and replay to watch auto-compaction fire mid-session.';
+  if (atEnd() && lastC && lastC.forced) return 'Session over: auto-compaction never fired at ' + fmtK(W) + ' (trigger ' + fmtK(ui.sim.thr) + '); your /compress did the same work on demand. Cap the window at 128K and replay to watch it fire by itself.';
+  if (atEnd()) return 'Session over: Hermes compacted ' + ui.sim.count + '× under a ' + fmtK(W) + ' window. With DeepSeek V4 Flash’s native 1M the same session never reaches the 500K trigger; capped at 64K it compacts five times. Switch the window above and replay.';
   if (src.role === 'tool' && src.tokens >= 9000) return 'Tool results dominate. Each one lands in the window and stays there, re-sent on every call. Hermes caps a single read_file at 100,000 chars and terminal output at 50,000 (first 40% + last 60%).';
   if (src.role === 'user') return 'A follow-up adds to the same window. Everything from before is still in it.';
   return 'Every call re-sends the whole window: prefix plus the full history so far. Hover a row to see where it sits.';
@@ -732,7 +723,7 @@ function render() {
 }
 function advance() {   // one tick forward; passes a gate if one is pending
   var g = pendingGate();
-  if (g && g.kind === 'compress') { ui.ended = true; stop(); render(); return; }
+  if (g && g.kind === 'compress') { ui.ended = true; ui.scrolledTick = null; stop(); render(); return; }
   if (ui.tick >= TOTAL_TICKS - 1) { stop(); render(); return; }
   ui.tick++; ui.sel = null;
   render();
