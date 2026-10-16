@@ -4,8 +4,8 @@ One visual for teaching the **context window of an agent**, with
 [Hermes Agent](https://github.com/NousResearch/hermes-agent) (Nous Research) as
 the worked instance, set up the way the Hermes workshop sets it up: `hermes`
 started in the home directory of a workshop VM as a personal assistant (not in
-a project), model `kit.deepseek-v4-flash` on the KIT KI-Toolbox endpoint,
-profile `default`. A 100-cell grid (one cell = 1% of the window, the same
+a code project), with a short `~/AGENTS.md` of standing instructions, model
+`kit.deepseek-v4-flash` on the KIT KI-Toolbox endpoint, profile `default`. A 100-cell grid (one cell = 1% of the window, the same
 metaphor as Hermes's own `/context` command) fills as a day plays: what loads
 before the user types, what each request adds, and what compaction throws
 away. The shape follows Anthropic's
@@ -20,11 +20,13 @@ demos. Listed on the hub like the other main demos.
 
 ## What loads before you type (Hermes's system prompt, in order)
 
-Hermes builds the system prompt once per session in three cache tiers
-(`agent/system_prompt.py` `build_system_prompt_parts`), then sends the tool
-schemas as the request's `tools` parameter. The page lists them in that order:
+Hermes builds the system prompt once per session in three parts its code and
+docs call `stable`, `context` and `volatile` (`agent/system_prompt.py`
+`build_system_prompt_parts`; developer guide, Prompt Assembly), then sends the
+tool schemas as the request's `tools` parameter. The page lists them in that
+order:
 
-| Tier | Row | Tokens | Where it comes from |
+| Part | Row | Tokens | Where it comes from |
 |---|---|---|---|
 | stable | SOUL.md (identity) | 167 | `~/.hermes/SOUL.md`, seeded on first run with the default persona (`hermes_cli/default_soul.py`, 667 chars) |
 | stable | Hermes help pointer | 150 | `HERMES_AGENT_HELP_GUIDANCE` |
@@ -33,7 +35,7 @@ schemas as the request's `tools` parameter. The page lists them in that order:
 | stable | Mid-turn steering note | 193 | `STEER_CHANNEL_NOTE` |
 | stable | Tool-use enforcement | 206 | `TOOL_USE_ENFORCEMENT_GUIDANCE`; gated on `TOOL_USE_ENFORCEMENT_MODELS`, which includes `deepseek` (`prompt_builder.py` L365) |
 | stable | Execution guidance | 988 | `OPENAI_MODEL_EXECUTION_GUIDANCE`; gated on `EXECUTION_GUIDANCE_MODELS`, which includes `deepseek` (L379-382) |
-| context | Project context files | 0 | none in `$HOME`; one type loads when present: `.hermes.md` → `AGENTS.md` chain → `CLAUDE.md` → `.cursorrules` (`prompt_builder.py` L1866-1867) |
+| context | AGENTS.md | 222 | sample `~/AGENTS.md` (872 chars, rendered as `## AGENTS.md` + body); one project-context type loads, first found: `.hermes.md` → `AGENTS.md` chain → `CLAUDE.md` → `.cursorrules` (`prompt_builder.py` L1866-1867, `_context_section` L1714-1717) |
 | context | Platform hint (CLI) | 218 | `PLATFORM_HINTS["cli"]` |
 | volatile | Skills index | 1,444 | 58 bundled skills, names + descriptions |
 | volatile | MEMORY.md | 162 | header 129 chars + sample content 517 chars (cap 2,200) |
@@ -46,15 +48,42 @@ schemas as the request's `tools` parameter. The page lists them in that order:
 | mcp | calendar (3 tools), tasks (4 tools) | 390 + 520 | estimates, about 130 tokens per tool; names follow `mcp__server__tool` (`tools/mcp_tool_schema.py` L159-175) |
 
 No coding brief and no workspace snapshot: a home directory is not a code
-workspace, so `coding_context.py` `_detect_profile` returns the general
-posture (L262-277). A profile (`hermes profile create coder`) is a separate
+workspace, and `coding_context.py` skips `$HOME` when looking for project
+markers ("a Makefile/AGENTS.md in the home dir is global config", `_marker_root`
+L220-233), so `_detect_profile` returns the general posture (L262-277). The
+same AGENTS.md inside a project folder would also switch the coding brief on.
+
+The sample AGENTS.md used for the count:
+
+```markdown
+# AGENTS.md — my research assistant
+
+## Who I am
+PhD student at KIT, SECUSO group. Topic: differential privacy in practice
+(epsilon choice, real-world releases, adversary models). Supervisor meeting Tuesdays 10:00.
+
+## How to answer
+- Short bullets. German or English, whichever I use.
+- Every reference checked against DBLP or arXiv, never from memory.
+- Quote exact numbers from sources; say when a figure is missing.
+
+## Where things are
+- Papers: ~/phd/papers (PDFs + pdftotext output)
+- Wiki: ~/wiki (llm-wiki skill; ingest new papers there before summarizing)
+- Thesis: ~/phd/thesis (LaTeX; do not edit .tex files without asking)
+
+## Rules
+- Calendar MCP is read-only; the tasks MCP may create and complete tasks.
+- Personal data of colleagues stays on KIT models. Never send it to cloud tools.
+- Student data, study data and papers under review: never in any tool.
+``` A profile (`hermes profile create coder`) is a separate
 Hermes home under `~/.hermes/profiles/<name>/` with its own `config.yaml`,
 `SOUL.md`, `memories/`, `skills/`, cron and sessions; it decides which of the
 rows above load, and adds only the one-line profile line to the window.
 
 ## How to drive it
 
-- **Start session** plays the prefix loading row by row (tier by tier), then
+- **Start session** plays the prefix loading row by row (part by part), then
   pauses at a gate where the user's first message waits to be sent. Play
   continues through Hermes's tool calls, pauses at each next user message, and
   pauses right after a compaction so the change is visible.
@@ -127,8 +156,8 @@ table above except the ones marked sample or estimate, plus the `arxiv`
 SKILL.md (10,061 chars = 2,516 tokens) and the `llm-wiki` SKILL.md (20,121
 chars = 5,031 tokens).
 
-**Sample or estimated:** the MEMORY.md and USER.md contents (517 and 364
-chars), the runtime-environment lines (353 chars for a Linux VM), the two MCP
+**Sample or estimated:** the AGENTS.md, MEMORY.md and USER.md contents (872,
+517 and 364 chars), the runtime-environment lines (353 chars for a Linux VM), the two MCP
 servers' schemas (about 130 tokens per tool).
 
 **Scripted:** the day's messages and their token counts, the subagents'
@@ -136,7 +165,7 @@ servers' schemas (about 130 tokens per tool).
 template).
 
 Behaviour of the scripted day under the real rules, from a headless run of the
-page's simulation core (prefix 20,169 tokens; conversation 97,886 tokens):
+page's simulation core (prefix 20,391 tokens; conversation 97,886 tokens):
 
 | Window | Trigger | Compactions | When |
 |---|---|---|---|

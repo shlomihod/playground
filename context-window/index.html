@@ -171,7 +171,7 @@
 <body>
 <button id="theme-toggle" class="theme-toggle" aria-label="Toggle color theme"></button>
 <h1>Context Window</h1>
-<p class="subtitle">Everything an agent &ldquo;knows&rdquo; right now has to fit in one request. Watch <b>Hermes Agent</b>&rsquo;s window fill up before you type, grow with every request of your day, and get compacted. Setup: <code>hermes</code> in your home directory, model <code>kit.deepseek-v4-flash</code>, profile <code>default</code>.</p>
+<p class="subtitle">Everything an agent &ldquo;knows&rdquo; right now has to fit in one request. Watch <b>Hermes Agent</b>&rsquo;s window fill up before you type, grow with every request of your day, and get compacted. Setup: <code>hermes</code> in your home directory with a short <code>AGENTS.md</code>, model <code>kit.deepseek-v4-flash</code>, profile <code>default</code>.</p>
 
 <div class="card">
   <div class="top">
@@ -211,8 +211,8 @@
 <details class="src">
   <summary>What is real here, and sources</summary>
   <ul>
-    <li><b>Real:</b> the order and content of the system prompt (three cache tiers, SOUL.md first, memory and the profile line last) and the size of each part, measured from the <a href="https://github.com/NousResearch/hermes-agent" target="_blank" rel="noopener">hermes-agent</a> source at commit <code>7520c4e8</code> (2026-10-15): identity and guidance text, the two DeepSeek-gated blocks, the index of 58 bundled skills, 37 of the 51 core tool schemas, the <code>arxiv</code> and <code>llm-wiki</code> skill bodies; the compaction rules (threshold 50% floored to 75% under 512K, 64K minimum, protected head and tail, tool-output stubs, skill pruning, summary budget, memory re-read when the system prompt is rebuilt); the 100-cell grid, status bar and colour bands of Hermes&rsquo;s own <code>/context</code> and CLI; the model: Hermes&rsquo;s model table gives <code>deepseek-v4-flash</code> a 1,000,000-token window (the KIT endpoint may report a smaller one; pick what your status bar shows), and the smaller windows stand for the <code>model.context_length</code> config cap. Tokens are Hermes&rsquo;s own estimate: 4 characters &asymp; 1 token. The tools in the session are Hermes&rsquo;s registered tools; MCP tool names follow its <code>mcp__server__tool</code> scheme.</li>
-    <li><b>Estimated or sample:</b> the two MCP servers&rsquo; schema sizes, the MEMORY.md and USER.md contents, the runtime-environment lines.</li>
+    <li><b>Real:</b> the order and content of the system prompt (its stable, context and volatile parts: SOUL.md first, memory and the profile line last) and the size of each part, measured from the <a href="https://github.com/NousResearch/hermes-agent" target="_blank" rel="noopener">hermes-agent</a> source at commit <code>7520c4e8</code> (2026-10-15): identity and guidance text, the two DeepSeek-gated blocks, the index of 58 bundled skills, 37 of the 51 core tool schemas, the <code>arxiv</code> and <code>llm-wiki</code> skill bodies; the compaction rules (threshold 50% floored to 75% under 512K, 64K minimum, protected head and tail, tool-output stubs, skill pruning, summary budget, memory re-read when the system prompt is rebuilt); the 100-cell grid, status bar and colour bands of Hermes&rsquo;s own <code>/context</code> and CLI; the model: Hermes&rsquo;s model table gives <code>deepseek-v4-flash</code> a 1,000,000-token window (the KIT endpoint may report a smaller one; pick what your status bar shows), and the smaller windows stand for the <code>model.context_length</code> config cap. Tokens are Hermes&rsquo;s own estimate: 4 characters &asymp; 1 token. The tools in the session are Hermes&rsquo;s registered tools; MCP tool names follow its <code>mcp__server__tool</code> scheme.</li>
+    <li><b>Estimated or sample:</b> the two MCP servers&rsquo; schema sizes, the AGENTS.md, MEMORY.md and USER.md contents, the runtime-environment lines.</li>
     <li><b>Scripted:</b> the day itself. Its messages and token counts are illustrative, in the spirit of Anthropic&rsquo;s <a href="https://code.claude.com/docs/en/context-window" target="_blank" rel="noopener">Explore the context window</a> simulation for Claude Code, which inspired this page.</li>
     <li>Hermes docs: <a href="https://hermes-agent.nousresearch.com/docs/developer-guide/context-compression-and-caching" target="_blank" rel="noopener">Context Compression and Caching</a>, <a href="https://hermes-agent.nousresearch.com/docs/developer-guide/prompt-assembly" target="_blank" rel="noopener">Prompt Assembly</a>, <a href="https://hermes-agent.nousresearch.com/docs/user-guide/features/memory" target="_blank" rel="noopener">Persistent Memory</a>. Source file and line references are in this demo&rsquo;s README.</li>
   </ul>
@@ -247,15 +247,16 @@
    DATA — Hermes Agent, commit 7520c4e8 (2026-10-15). Tokens = ceil(chars / 4),
    Hermes's own rough estimator (agent/model_metadata.py CHARS_PER_TOKEN = 4).
    ===================================================================== */
-/* ---- What sits in the window before you type: Hermes's system prompt in its three cache tiers
+/* ---- What sits in the window before you type: Hermes's system prompt in its three tiers (stable, context, volatile)
    (agent/system_prompt.py build_system_prompt_parts), then the tool schemas (a separate `tools`
    parameter, not prompt text). Scenario: `hermes` started in $HOME on a workshop VM, model
-   kit.deepseek-v4-flash, profile "default". Home is not a code workspace, so Hermes's general
-   posture applies: no coding brief, no workspace snapshot (coding_context.py _detect_profile). ---- */
+   kit.deepseek-v4-flash, profile "default", a short ~/AGENTS.md. Home is not a code workspace
+   (an AGENTS.md there is "global config", coding_context.py _marker_root), so Hermes's general
+   posture applies: no coding brief, no workspace snapshot (_detect_profile). ---- */
 var PREFIX_ROWS = [
   // stable tier
   { id: 'soul', tier: 'stable', cat: 'system', label: 'SOUL.md (identity)', tokens: 167, path: '~/.hermes/SOUL.md',
-    desc: 'Who the agent is. Slot #1 of the system prompt. Hermes seeds this file on first run with its default persona (667 chars: “You are Hermes Agent, built by Nous Research. Be direct…”); edit it and the personality changes. Each profile has its own.',
+    desc: 'Who the agent is. The first thing in the system prompt. Hermes seeds this file on first run with its default persona (667 chars: “You are Hermes Agent, built by Nous Research. Be direct…”); edit it and the personality changes. Each profile has its own.',
     fate: 'Part of the system prompt: never compacted, re-read from disk when the prompt is rebuilt after a compaction.' },
   { id: 'help', tier: 'stable', cat: 'system', label: 'Hermes help pointer', tokens: 150, path: 'prompt_builder.py HERMES_AGENT_HELP_GUIDANCE',
     desc: 'Tells the model to answer questions about Hermes itself from the hermes-agent skill rather than guess.', fate: 'Never compacted.' },
@@ -270,9 +271,9 @@ var PREFIX_ROWS = [
   { id: 'exec', tier: 'stable', cat: 'system', label: 'Execution guidance (DeepSeek-class)', tokens: 988, path: 'prompt_builder.py OPENAI_MODEL_EXECUTION_GUIDANCE',
     desc: 'A second model-gated block (gpt, codex, grok, deepseek, kimi, qwen, glm, minimax, mistral, muse): execution discipline learned from agentic evals. Lines that mention tools not in this session are dropped. Switch the model to Claude and 1,194 tokens leave the prefix.', fate: 'Never compacted.' },
   // context tier
-  { id: 'ctx', tier: 'context', cat: 'rules', label: 'Project context files: none', tokens: 0, path: '$HOME has no .hermes.md / AGENTS.md / CLAUDE.md / .cursorrules',
-    desc: 'Hermes loads ONE project context file type from the working directory (first found: .hermes.md, then the AGENTS.md chain, then CLAUDE.md, then .cursorrules), capped at 6% of the window in characters. A personal assistant started in your home directory has none, so this slot is empty. Start `hermes` inside a project and its AGENTS.md lands here.',
-    fate: 'Re-read from disk at the prompt rebuild.' },
+  { id: 'ctx', tier: 'context', cat: 'rules', label: 'AGENTS.md (your standing instructions)', tokens: 222, est: true, path: '~/AGENTS.md (sample, 872 chars)',
+    desc: 'Project context files. Hermes loads ONE type from the working directory, first found: .hermes.md, then the AGENTS.md chain, then CLAUDE.md, then .cursorrules, capped at 6% of the window in characters. Here: a short AGENTS.md in your home directory (who you are, how to answer, where papers and the wiki live, what stays on KIT models). Hermes’s own comment calls an AGENTS.md in the home directory “global config”: it loads, but does not switch on the coding posture. Start Hermes inside a code project and the same file also brings the coding brief and a workspace snapshot.',
+    fate: 'Re-read from disk at the prompt rebuild, so edits appear after a compaction or /new.' },
   { id: 'platform', tier: 'context', cat: 'system', label: 'Platform hint (CLI)', tokens: 218, path: 'prompt_builder.py PLATFORM_HINTS["cli"]',
     desc: '“You are in a plain terminal (CLI). Markdown does NOT render…”. The Telegram gateway sends a different hint; this is why the same agent formats answers differently per channel.', fate: 'Never compacted.' },
   // volatile tier
@@ -286,7 +287,7 @@ var PREFIX_ROWS = [
     desc: 'About you: role, style, pet peeves. Up to 1,375 characters, rendered under “USER PROFILE (who the user is)”. Same frozen snapshot. Watch this row after the first message: the agent saves a memory and this number does not change until the prompt is rebuilt.',
     fate: 'Re-read from disk at the prompt rebuild, so the note saved in this session appears then.' },
   { id: 'profile', tier: 'volatile', cat: 'system', label: 'Active profile line', tokens: 81, path: 'system_prompt.py _active_profile_line',
-    desc: '“Active Hermes profile: default. Other profiles (if any) live under ~/.hermes/profiles/<name>/…”. A profile is a whole separate Hermes home (its own config.yaml, SOUL.md, memories/, skills/, cron, sessions). It decides WHICH SOUL.md, MEMORY.md, USER.md and skills you see in this list; the only thing it adds to the window itself is this one line.',
+    desc: '“Active Hermes profile: default. Other profiles (if any) live under ~/.hermes/profiles/&lt;name&gt;/…”. A profile is a whole separate Hermes home (its own config.yaml, SOUL.md, memories/, skills/, cron, sessions). It decides WHICH SOUL.md, MEMORY.md, USER.md and skills you see in this list; the only thing it adds to the window itself is this one line.',
     fate: 'Never compacted.' },
   { id: 'date', tier: 'volatile', cat: 'system', label: 'Date line + Model / Provider / Platform', tokens: 36, path: 'system_prompt.py _timestamp_line',
     desc: '“Conversation started: Thursday, October 16, 2026 (Europe/Berlin, CEST, UTC+02:00)” then Model: kit.deepseek-v4-flash, Provider: kit, Platform: cli. Date only, so the prompt bytes stay identical all day for the prefix cache.',
@@ -308,7 +309,7 @@ var PREFIX_ROWS = [
   { id: 'ts_browser', tier: 'tools', cat: 'tools', label: 'browser (14 tools)', tokens: 3702, path: 'tools/browser_tool.py', desc: 'Headless browser: navigate, snapshot, click, type, scroll… Enabled by default in the CLI toolset even if you never use it. `hermes tools` lets you switch it off and these cells disappear.', fate: 'Never compacted.' },
   { id: 'ts_misc', tier: 'tools', cat: 'tools', label: 'skills (3), session_search, todo_list, clarify, execute_code', tokens: 2467, path: 'tools/', desc: 'skills_list / skill_view / skill_manage, search of past sessions, a todo list, a clarifying-question tool and a code sandbox.', fate: 'Never compacted.' },
   { id: 'ts_ops', tier: 'tools', cat: 'tools', label: 'computer_use, manage_connections', tokens: 2489, path: 'tools/', desc: 'Desktop control and connector account status. Measured but rarely used in a terminal session.', fate: 'Never compacted.' },
-  // MCP servers (Part 8): their tools are advertised like any other, prefixed mcp__<server>__<tool>; /context counts them in a separate bucket
+  // MCP servers (Part 8): their tools are advertised like any other, prefixed mcp__&lt;server&gt;__&lt;tool&gt;; /context counts them in a separate bucket
   { id: 'mcp_cal', tier: 'mcp', cat: 'mcp', label: 'MCP calendar (3 read-only tools)', tokens: 390, est: true, path: 'hermes mcp add calendar …', desc: 'mcp__calendar__list_events, get_event, search_events. Size is an estimate (about 130 tokens per tool); the real number depends on the server you write.', fate: 'Never compacted.' },
   { id: 'mcp_tasks', tier: 'mcp', cat: 'mcp', label: 'MCP tasks (4 tools)', tokens: 520, est: true, path: 'hermes mcp add tasks …', desc: 'mcp__tasks__list, create, update, complete. The tasks server can change things; the calendar cannot. Estimate.', fate: 'Never compacted.' }
 ];
@@ -544,7 +545,7 @@ var CATS = {
   system:    { label: 'System prompt',    sw: 'var(--c-system)' },
   tools:     { label: 'Tool definitions', sw: 'var(--c-tools)' },
   mcp:       { label: 'MCP tools',        sw: 'var(--c-mcp)' },
-  rules:     { label: 'Project context files', sw: 'var(--c-rules)' },
+  rules:     { label: 'AGENTS.md',        sw: 'var(--c-rules)' },
   skills:    { label: 'Skills index',     sw: 'var(--c-skills)' },
   memory:    { label: 'Memory',           sw: 'var(--c-memory)' },
   user:      { label: 'You',              sw: 'var(--c-user)' },
@@ -609,7 +610,7 @@ function paintGrid(segs) {
   }
 }
 var legendEl = document.getElementById('legend');
-Object.keys(CATS).filter(function (k) { return k !== 'rules'; }).forEach(function (k) {
+Object.keys(CATS).forEach(function (k) {
   var s = document.createElement('span'); s.innerHTML = '<i class="sw" style="--sw:' + CATS[k].sw + '"></i>' + CATS[k].label; s.dataset.cat = k;
   s.addEventListener('mouseenter', function () { ui.hovCat = k; render(); });
   s.addEventListener('mouseleave', function () { ui.hovCat = null; render(); });
@@ -636,7 +637,7 @@ function evRow(seg, label, badge, extraCls) {
   d.addEventListener('click', function () { ui.sel = ui.sel === seg.id ? null : seg.id; render(); });
   return d;
 }
-var TIER_LABEL = { stable: 'system prompt, stable tier', context: 'system prompt, context tier', volatile: 'system prompt, volatile tier', tools: 'tool definitions (the tools parameter)', mcp: 'MCP servers (Part 8)' };
+var TIER_LABEL = { stable: 'system prompt · stable', context: 'system prompt · context', volatile: 'system prompt · volatile', tools: 'tool definitions (the tools parameter)', mcp: 'MCP servers (Part 8)' };
 function phase(txt) { var p = document.createElement('div'); p.className = 'phase'; p.textContent = txt; return p; }
 function renderTimeline(segs) {
   tlEl.innerHTML = '';
@@ -723,11 +724,11 @@ function takeaway() {
   if (ui.sim.count && ui.tick === lastCompactTick()) return 'Compaction did not wait for the window to be full: Hermes fires it when the prompt reaches ' + fmtK(ui.sim.thr) + ' tokens (' + Math.round(ui.sim.thr / W * 100) + '% of ' + fmtK(W) + '). Old tool outputs became stubs, the middle became one summary row, the newest rows survived verbatim, and the system prompt was rebuilt: USER.md now includes what the agent saved, and a compaction note was added.';
   if (step < 0) {
     var r = BOOT_ROWS[ui.tick];
-    if (r.tier === 'stable') return 'The system prompt is built once per session in three cache tiers. The stable tier first: SOUL.md (who the agent is), then guidance text. Two of these blocks exist only because the model is DeepSeek-class.';
-    if (r.tier === 'context') return 'The context tier holds whatever the working directory contributes. A personal assistant in your home directory contributes nothing: no AGENTS.md. Start Hermes inside a project and it would appear here.';
-    if (r.tier === 'volatile') return 'The volatile tier, last so the stable part stays cacheable: the skills index, MEMORY.md and USER.md (frozen snapshots), the profile line, the date and the runtime environment. This is where Part 4’s memory files live.';
+    if (r.tier === 'stable') return 'Hermes builds the system prompt once per session in three parts it calls stable, context and volatile. Stable comes first: SOUL.md (who the agent is), then guidance text. Two of these blocks exist only because the model is DeepSeek-class.';
+    if (r.tier === 'context') return 'Context holds whatever the working directory contributes: your AGENTS.md of standing instructions, and the platform hint. In a code project this part would also carry Hermes’s coding brief and a git snapshot.';
+    if (r.tier === 'volatile') return 'Volatile comes last so the stable part stays cacheable: the skills index, MEMORY.md and USER.md (frozen snapshots), the profile line, the date and the runtime environment. This is where Part 4’s memory files live.';
     if (r.tier === 'tools') return 'Tool schemas are not prompt text; they travel in the request’s tools parameter. They are the biggest fixed cost, about two thirds of everything sent before your first word, and the browser toolset alone is bigger than the whole system prompt.';
-    return 'An MCP server’s tools are advertised like any other, prefixed mcp__<server>__<tool>. Every server you add costs its schemas on every call, which is why Part 8 keeps only the read tools.';
+    return 'An MCP server’s tools are advertised like any other, prefixed mcp__&lt;server&gt;__&lt;tool&gt;. Every server you add costs its schemas on every call, which is why Part 8 keeps only the read tools.';
   }
   if (step === 0) return 'Your first message is tiny: ' + fmtK(ui.sim.prefix.total) + ' tokens were already in the window before it. Most of what the model reads is setup, not your words.';
   var src = SCRIPT[step];
