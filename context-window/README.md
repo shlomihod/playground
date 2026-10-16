@@ -1,43 +1,35 @@
 # Context window demo
 
-A teaching aid for the **context window of an agent**, using
+One visual for teaching the **context window of an agent**, with
 [Hermes Agent](https://github.com/NousResearch/hermes-agent) (Nous Research) as
-the worked instance: what sits in the window before the user types, how a
-session fills it and is re-sent on every call, what compaction keeps, stubs and
-summarizes, and why the agent "forgets".
+the worked instance. A 100-cell grid (one cell = 1% of the window, the same
+metaphor as Hermes's own `/context` command) fills as a session plays: what
+loads before the user types, what each tool call adds, and what compaction
+throws away. The shape follows Anthropic's
+["Explore the context window"](https://code.claude.com/docs/en/context-window)
+simulation for Claude Code: a timeline that fills a bar, gates where "you type"
+the next prompt, a hover pane explaining each event, and a compaction at the
+end.
 
 Self-contained static page: no build, no dependencies, no network calls. Theme
 (light/dark) is inlined and shares the `playground-theme` key with the other
-demos. Listed on the hub and indexable, like the other main demos.
+demos. Listed on the hub like the other main demos.
 
-Deep links: `?window=128000&threshold=0.5&step=19` preselects the window, the
-configured threshold and the session step.
+## How to drive it
 
-## Four panels
-
-1. **Before you type: the fixed prefix.** A 100-cell grid (one cell = 1% of
-   the window, the same metaphor as Hermes's own `/context` command) fills with
-   the system prompt, tool schemas, AGENTS.md, the skills index and the memory
-   snapshot. Toggles remove parts; a selector switches the window (64K, 128K,
-   200K, 1M). A replica of Hermes's status bar shows the `used/max` readout and
-   its colour bands. Takeaway: ~22K tokens are sent before the first word, and
-   again on every call.
-2. **A session fills the window.** A scripted debugging session (36 messages:
-   user, assistant tool calls, tool results, a skill load, a memory write, a
-   sub-agent, a PR) is stepped through with Prev/Next/autoplay (arrow keys,
-   space). The grid, the status bar, per-call token counts (cached vs new) and
-   the cumulative "sent so far" counter update at each step. Clicking a message
-   shows its text and what the compressor will do to it.
-3. **Compaction.** The live formulas for the trigger, tail budget, head and
-   summary budget with the current window and threshold; the four phases with
-   the real counts from the last compaction; the summary row now in the window
-   (Hermes's template, simulated wording). A slider changes the threshold, a
-   button forces `/compress`.
-4. **Will it still remember?** Seven planted facts; the student bets, then the
-   reveal applies the compressor's actual rules (head/tail protection, regex
-   anchor index, verbatim user quotes, tool-output stubs, skill pruning, memory
-   reload at the prompt rebuild). A four-layer box separates live context,
-   memory files, session history and skills.
+- **Start session** plays the prefix loading, then pauses at a gate where the
+  user's prompt waits to be sent. Play continues through Hermes's tool calls,
+  pauses at the next user prompt, and pauses right after a compaction so the
+  change is visible.
+- **Next** steps one event at a time; `→` and `space` do the same.
+- **Hover** a timeline row: its cells light up in the grid and the pane says
+  what it is and what compaction will do (or did) to it. Click to pin.
+- **Context window** selector (64K, 128K, 200K, 1M): the same session replays
+  under a different window. At 200K auto-compaction fires once, late; at 128K
+  once, mid-session; at 64K five times; at 1M never, so a `/compress` gate is
+  offered at the end instead.
+- Deep links: `?window=128000&step=19` (step is 1-based; `step=0` shows the
+  loaded prefix).
 
 ## What is real and what is scripted
 
@@ -66,64 +58,40 @@ configured threshold and the session step.
 | Token estimator | 4 chars per token (ASCII) | `model_metadata.py` L2374 |
 | `/context` grid and categories | 20x5 cells; system_prompt, tool_definitions, rules, skills, mcp, subagent_definitions, memory, conversation | `agent/context_breakdown.py` L36-56 |
 | Status-bar bands | green < 50%, yellow 50-80%, orange > 80%, red >= 95% | `hermes_cli/cli_status_bar_mixin.py` L49-52; docs CLI guide |
-| Prompt cache | 4 breakpoints (static system prefix, end of system, last 2 messages), 5-minute TTL default | `agent/prompt_caching.py` L1-5, L330-362 |
 
 **Measured statically from the same commit** (text constants and tool schemas,
 `ceil(chars / 4)`, no Hermes code executed):
 
 | Prefix part | Tokens | Note |
 |---|---|---|
-| Default identity | 166 | `DEFAULT_AGENT_IDENTITY` |
-| Hermes help pointer | 150 | `HERMES_AGENT_HELP_GUIDANCE` |
-| Task-completion + parallel-tool guidance | 348 | 769 + 618 chars |
-| Memory / session-search / skills guidance | 417 | `build_memory_guidance(True, True)` + two constants |
-| Mid-turn steering note | 193 | `STEER_CHANNEL_NOTE` |
-| Coding brief | 658 | `coding_context.CODING_AGENT_GUIDANCE` |
-| Platform hint (CLI) | 218 | `PLATFORM_HINTS["cli"]` |
-| Skills index, 58 bundled skills | 1,444 | full `## Skills` block |
-| AGENTS.md example | 2,988 | the Hermes repo's own `AGENTS.md` (11,952 chars) |
+| System prompt text | 2,300 | identity 166, help pointer 150, task + parallel-tool guidance 348, memory/session-search/skills guidance 417, steering note 193, coding brief 658, CLI platform hint 218, plus 150 assumed for the workspace/timestamp/profile lines (not measured) |
 | Tool schemas | 14,636 | 37 of the 51 core CLI tools resolved; the 14 kanban tools (dispatcher workers only) were not. Hermes's own comment: "50+ tools ≈ 20-30K tokens" |
+| AGENTS.md example | 2,988 | the Hermes repo's own `AGENTS.md` (11,952 chars) |
+| Skills index, 58 bundled skills | 1,444 | full `## Skills` block |
+| Memory snapshot | 570 | assumed fill: 1,320 / 2,200 chars of MEMORY.md and 820 / 1,375 of USER.md |
 | python-debugpy skill body | 3,746 | 14,984 chars, loaded by `skill_view` in the session |
 
-Not measured, assumed: the workspace snapshot / timestamp / profile / runtime
-lines (150 tokens, labelled as an estimate in the ledger); the memory block's
-starting fill (1,320 / 2,200 and 820 / 1,375 chars).
+**Scripted:** the coding session (35 messages: user, Hermes tool calls, tool
+results, a skill load, a memory write, a sub-agent, a PR) and its token counts;
+the sub-agent's 41,000-token side window; the summary wording (its structure is
+Hermes's template). The grid fills with the scripted numbers; the rules that
+shrink it are the real ones above.
 
-**Scripted:** the session's messages and their token counts, the sub-agent's
-41,000-token side window, the summary wording (its structure is Hermes's
-template), and the cache accounting (modelled on Hermes's breakpoint layout,
-not measured).
-
-Behaviour of the scripted session under the real rules, from a headless run of
-the page's simulation core:
+Behaviour of the scripted session under those rules, from a headless run of the
+page's simulation core:
 
 | Window | Trigger | Compactions | When |
 |---|---|---|---|
 | 64,000 | 54,400 (85% cap) | 5 | steps 14, 19, 27, 29, 31 |
 | 128,000 | 96,000 (75%) | 1 | step 19 |
-| 200,000 | 150,000 (75%) | 1 | step 34 (and none if AGENTS.md or the browser toolset is switched off) |
-| 1,000,000 | 500,000 (50%) | 0 | never in this session |
-
-## Prior art
-
-The closest existing demo is Anthropic's
-["Explore the context window"](https://code.claude.com/docs/en/context-window)
-on the Claude Code docs: a scripted timeline that fills a 200K bar with
-illustrative blocks and ends with `/compact`. This page borrows its
-scripted-session shape and adds what it lacks: a Hermes-faithful compaction
-algorithm with live formulas and knobs, head/summary/tail zones, per-call cache
-accounting, a cumulative "sent so far" counter, and a place-your-bets recall
-check. Product UIs (Claude Code `/context`, Cursor's context ring, Cline's bar,
-Roo's tri-segment bar, Hermes's own `/context` grid) show *how full* a window
-is; none explains *what compaction does*.
+| 200,000 | 150,000 (75%) | 1 | step 34 |
+| 1,000,000 | 500,000 (50%) | 0 | never; the page offers `/compress` at the end |
 
 ## Sources
 
 - NousResearch/hermes-agent at `7520c4e8b3791f081b2c26d5ea9a0c07b0363401`
   (2026-10-15); docs at hermes-agent.nousresearch.com (Context Compression and
-  Caching, Prompt Assembly, Persistent Memory, CLI Interface, "My Agent Feels
-  Dumber").
-- Kelly Hong, Anton Troynikov, Jeff Huber (2025), *Context Rot: How Increasing
-  Input Tokens Impacts LLM Performance*, Chroma technical report.
-- Shiyang Chen (2026), *Governance Decay: How Context Compaction Silently
-  Erases Safety Constraints in Long-Horizon LLM Agents*, arXiv:2606.22528.
+  Caching, Prompt Assembly, Persistent Memory, CLI Interface).
+- Anthropic, "Explore the context window", Claude Code docs
+  (https://code.claude.com/docs/en/context-window): the interactive simulation
+  this page is modelled on.
