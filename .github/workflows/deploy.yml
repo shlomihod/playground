@@ -54,6 +54,7 @@ jobs:
           cp -r epi _site/epi
           cp -r fox _site/fox
           cp -r universal-jailbreak _site/universal-jailbreak
+          cp -r context-window _site/context-window
 
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3

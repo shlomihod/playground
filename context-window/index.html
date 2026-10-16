@@ -1,0 +1,894 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Context Window</title>
+<meta name="description" content="What is inside Hermes Agent's context window, how a session fills it, what compaction keeps and throws away, and why the agent forgets." />
+<script>
+  // Resolve theme before first paint (mirrors the hub page).
+  (function () {
+    var ALLOWED = ['light', 'dark'];
+    function validate(v) { return ALLOWED.indexOf(v) >= 0 ? v : null; }
+    var stored = null;
+    try { stored = localStorage.getItem('playground-theme'); } catch (e) {}
+    var resolved = validate(stored);
+    if (!resolved) {
+      try { resolved = matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark'; }
+      catch (e) { resolved = 'dark'; }
+    }
+    document.documentElement.setAttribute('data-theme', resolved);
+  })();
+</script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #0a0a1a; --bg-surface: #12122a; --bg-card: #1a1a3a;
+    --text: #e0e0f0; --text-dim: #8888aa;
+    --accent: #ffd700; --accent-glow: rgba(255, 215, 0, 0.15);
+    --border: #2a2a4a; --border-strong: #333366;
+    --safe: #51cf66; --safe-bg: rgba(81, 207, 102, 0.14);
+    --warn: #ffa94d; --warn-bg: rgba(255, 169, 77, 0.16);
+    --danger: #ff6b6b; --danger-bg: rgba(255, 107, 107, 0.16);
+    /* context categories (Hermes /context order: system, tools, rules, skills, memory, conversation) */
+    --c-system: #7f8ca8; --c-tools: #9b7bc4; --c-rules: #4a9b8e; --c-skills: #d4a843; --c-memory: #3fb9c7;
+    --c-user: #558ae0; --c-assistant: #d97757; --c-tool: #8a8880; --c-summary: #e06ab0; --c-stub: #4a4a62;
+    --c-free: #22223c;
+    --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    --font-mono: 'SF Mono', 'Fira Code', 'Cascadia Code', ui-monospace, monospace;
+  }
+  [data-theme="light"] {
+    --bg: #f7f7fb; --bg-surface: #eceef5; --bg-card: #ffffff;
+    --text: #1a1a2e; --text-dim: #5a5a78;
+    --accent: #a67c00; --accent-glow: rgba(166, 124, 0, 0.2);
+    --border: #d0d4e0; --border-strong: #b8bccc;
+    --safe: #2f9e44; --safe-bg: rgba(47, 158, 68, 0.12);
+    --warn: #e8590c; --warn-bg: rgba(232, 89, 12, 0.12);
+    --danger: #e03131; --danger-bg: rgba(224, 49, 49, 0.10);
+    --c-system: #6b7897; --c-tools: #7d5bb0; --c-rules: #2f8a7c; --c-skills: #b8891a; --c-memory: #1f9aa8;
+    --c-user: #3b6fd0; --c-assistant: #c75f3f; --c-tool: #76746c; --c-summary: #c7459a; --c-stub: #b9b9c8;
+    --c-free: #dfe2ee;
+  }
+  html, body { background: var(--bg); color: var(--text); font-family: var(--font-sans); transition: background .2s, color .2s; }
+  body { max-width: 1080px; margin: 0 auto; padding: 26px 18px 60px; line-height: 1.5; }
+  a { color: var(--accent); }
+  h1 { font-size: 1.9rem; color: var(--accent); }
+  .subtitle { font-size: 1rem; margin-top: 2px; }
+  .note { color: var(--text-dim); font-size: .82rem; margin-top: 6px; }
+  .note b, .note code { color: var(--text); }
+  code, .mono { font-family: var(--font-mono); font-size: .84em; }
+  h2 { font-size: 1.1rem; margin-bottom: 10px; }
+  h2 .num { color: var(--accent); margin-right: 8px; font-variant-numeric: tabular-nums; }
+  h3 { font-size: .9rem; margin: 10px 0 6px; color: var(--text-dim); text-transform: uppercase; letter-spacing: .04em; }
+  section { margin-top: 22px; }
+  .card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; padding: 18px; }
+  .theme-toggle {
+    position: fixed; top: 1rem; right: 1rem; z-index: 10;
+    background: var(--bg-card); color: var(--text);
+    border: 1px solid var(--border-strong); border-radius: 8px;
+    padding: .4rem .6rem; font-size: 1rem; line-height: 1; cursor: pointer;
+    transition: border-color .15s, color .15s, background .15s;
+  }
+  .theme-toggle:hover { border-color: var(--accent); }
+  .theme-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .btn { border: 1px solid var(--border-strong); background: var(--bg-surface); color: var(--text);
+    border-radius: 8px; padding: 8px 14px; font-size: .86rem; cursor: pointer; font-family: inherit;
+    transition: border-color .15s, background .15s, color .15s; }
+  .btn:hover { border-color: var(--accent); }
+  .btn:disabled { opacity: .45; cursor: default; }
+  .btn.primary { border-color: var(--accent); color: var(--accent); }
+  .btn.danger { border-color: var(--danger); color: var(--danger); }
+  .btn.small { padding: 5px 10px; font-size: .78rem; }
+  .btn.on { background: var(--accent-glow); border-color: var(--accent); }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+  .row.between { justify-content: space-between; }
+  select, input[type=range] { font-family: inherit; }
+  select { background: var(--bg-surface); color: var(--text); border: 1px solid var(--border-strong); border-radius: 8px; padding: 7px 10px; font-size: .86rem; }
+  label.ctl { display: inline-flex; align-items: center; gap: 8px; font-size: .86rem; }
+  input[type=range] { width: 150px; accent-color: var(--accent); }
+  .pill-toggle { display: inline-flex; align-items: center; gap: 7px; border: 1px solid var(--border-strong); border-radius: 999px;
+    background: var(--bg-surface); color: var(--text); padding: 6px 12px; font-size: .8rem; cursor: pointer; font-family: inherit; }
+  .pill-toggle .sw { width: 10px; height: 10px; border-radius: 3px; background: var(--sw, var(--text-dim)); opacity: .35; }
+  .pill-toggle.on .sw { opacity: 1; }
+  .pill-toggle.on { border-color: var(--sw, var(--accent)); }
+  .pill-toggle .tk { color: var(--text-dim); font-variant-numeric: tabular-nums; }
+
+  /* Status bar replica */
+  .statusbar { font-family: var(--font-mono); font-size: .82rem; background: var(--bg-surface); border: 1px solid var(--border);
+    border-radius: 8px; padding: 8px 12px; white-space: nowrap; overflow-x: auto; }
+  .statusbar .bar { letter-spacing: 1px; }
+  .statusbar .good { color: var(--safe); } .statusbar .warn { color: var(--accent); }
+  .statusbar .bad { color: var(--warn); } .statusbar .critical { color: var(--danger); }
+  .statusbar .sep { color: var(--text-dim); padding: 0 6px; }
+
+  /* Window grid */
+  .gridwrap { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(260px, .9fr); gap: 18px; align-items: start; }
+  .ctxgrid { display: grid; grid-template-columns: repeat(20, 1fr); gap: 3px; aspect-ratio: 20 / 5; width: 100%; }
+  .cell { background: var(--c-free); border-radius: 3px; transition: background-color .35s ease, outline-color .3s; position: relative; min-height: 10px; }
+  .cell.zone { background-image: repeating-linear-gradient(135deg, transparent 0 4px, rgba(255,107,107,.28) 4px 6px); }
+  .cell.trig { outline: 2px solid var(--danger); outline-offset: -1px; }
+  .gridcap { display: flex; justify-content: space-between; font-size: .74rem; color: var(--text-dim); margin-top: 6px; font-variant-numeric: tabular-nums; }
+  .legend { display: flex; gap: 12px 16px; flex-wrap: wrap; font-size: .78rem; color: var(--text-dim); margin: 10px 0 4px; }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .swatch { width: 12px; height: 12px; border-radius: 3px; display: inline-block; background: var(--sw); }
+  .legend .glyph { font-family: var(--font-mono); color: var(--text); }
+
+  /* Ledger */
+  table.ledger { width: 100%; border-collapse: collapse; font-size: .8rem; table-layout: fixed; }
+  table.ledger th, table.ledger td { text-align: left; padding: 5px 6px; border-bottom: 1px solid var(--border); vertical-align: top; overflow-wrap: anywhere; }
+  table.ledger th:nth-child(2), table.ledger td:nth-child(2) { width: 62px; }
+  table.ledger th:nth-child(3), table.ledger td:nth-child(3) { width: 38%; }
+  table.ledger th { color: var(--text-dim); font-weight: 600; font-size: .72rem; text-transform: uppercase; letter-spacing: .03em; }
+  table.ledger td.n { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  table.ledger td.src { color: var(--text-dim); font-family: var(--font-mono); font-size: .7rem; }
+  table.ledger tr.off td { opacity: .35; text-decoration: line-through; }
+  table.ledger tr.total td { font-weight: 700; border-top: 2px solid var(--border-strong); }
+  .big { font-size: 1.9rem; font-weight: 700; line-height: 1.1; font-variant-numeric: tabular-nums; }
+  .big small { font-size: .8rem; font-weight: 400; color: var(--text-dim); display: block; }
+
+  /* Stepper + transcript */
+  .stepbar { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; }
+  .stepbar .cnt { font-variant-numeric: tabular-nums; color: var(--text-dim); font-size: .86rem; min-width: 90px; }
+  .sessgrid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(280px, .9fr); gap: 18px; align-items: start; }
+  .transcript { display: flex; flex-direction: column; gap: 3px; max-height: 560px; overflow-y: auto; padding-right: 4px; border: 1px solid var(--border); border-radius: 10px; padding: 8px; background: var(--bg-surface); }
+  .msg { border-radius: 6px; padding: 0 10px; display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    font-size: .76rem; cursor: pointer; overflow: hidden; border-left: 4px solid var(--c); background: color-mix(in srgb, var(--c) 18%, var(--bg-card));
+    transition: height .4s ease, opacity .4s ease, background-color .4s ease, border-color .4s; min-height: 0; }
+  .msg .t { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .msg .t b { font-weight: 600; }
+  .msg .k { color: var(--text-dim); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .msg.stub { border-left-style: dashed; background: color-mix(in srgb, var(--c-stub) 30%, var(--bg-card)); color: var(--text-dim); }
+  .msg.head { box-shadow: inset 0 0 0 1px var(--safe); }
+  .msg.tail { box-shadow: inset 0 0 0 1px var(--c-user); }
+  .msg.summary { border-left-color: var(--c-summary); background: color-mix(in srgb, var(--c-summary) 22%, var(--bg-card)); }
+  .msg.sel { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .msg.ghost { opacity: .55; border-left-style: dotted; }
+  .zonelbl { font-size: .68rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: .05em; padding: 6px 2px 2px; }
+  .detail { background: var(--bg-surface); border: 1px solid var(--border); border-radius: 10px; padding: 12px; font-size: .82rem; min-height: 120px; }
+  .detail .role { font-size: .7rem; text-transform: uppercase; letter-spacing: .05em; color: var(--text-dim); }
+  .detail pre { white-space: pre-wrap; word-break: break-word; font-family: var(--font-mono); font-size: .74rem; color: var(--text); margin-top: 6px;
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 8px; max-height: 240px; overflow: auto; }
+  .detail .fate { margin-top: 8px; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--border); font-size: .78rem; }
+  .readouts { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; }
+  .ro { background: var(--bg-surface); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; }
+  .ro .v { font-size: 1.25rem; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.15; }
+  .ro .l { font-size: .72rem; color: var(--text-dim); }
+  .ro.hi { border-color: var(--c-summary); }
+  .callbar { display: flex; height: 14px; border-radius: 7px; overflow: hidden; margin-top: 6px; background: var(--c-free); }
+  .callbar div { transition: width .4s ease; }
+  .callbar .cached { background: var(--safe); opacity: .7; }
+  .callbar .fresh { background: var(--warn); }
+  .eventlog { font-size: .76rem; color: var(--text-dim); max-height: 110px; overflow-y: auto; margin-top: 10px; font-variant-numeric: tabular-nums; }
+  .eventlog div { padding: 2px 0; border-bottom: 1px dotted var(--border); }
+  .eventlog .cmp { color: var(--c-summary); }
+
+  /* Compaction math */
+  .formula { font-family: var(--font-mono); font-size: .78rem; background: var(--bg-surface); border: 1px solid var(--border); border-radius: 10px; padding: 12px; line-height: 1.7; overflow-x: auto; }
+  .formula b { color: var(--accent); }
+  .formula .r { color: var(--danger); }
+  .phases { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: 12px; }
+  .phase { background: var(--bg-surface); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; font-size: .78rem; }
+  .phase h4 { font-size: .78rem; margin-bottom: 4px; color: var(--accent); }
+  .phase .v { font-size: 1.1rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .phase .s { color: var(--text-dim); font-size: .72rem; }
+  .sumbox { background: var(--bg-surface); border: 1px solid var(--c-summary); border-radius: 10px; padding: 12px; font-family: var(--font-mono); font-size: .72rem; white-space: pre-wrap; color: var(--text); margin-top: 12px; max-height: 300px; overflow: auto; }
+  .sumbox .h { color: var(--c-summary); }
+  .sumbox .d { color: var(--text-dim); }
+
+  /* Bets */
+  .bets { display: grid; grid-template-columns: 1fr; gap: 8px; }
+  .bet { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: center; background: var(--bg-surface); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; font-size: .82rem; }
+  .bet .q b { font-weight: 600; }
+  .bet .q small { display: block; color: var(--text-dim); font-size: .74rem; }
+  .bet .ans { display: flex; gap: 6px; }
+  .bet .ans .btn.pick { border-color: var(--accent); color: var(--accent); }
+  .bet .res { grid-column: 1 / -1; display: none; padding: 8px 10px; border-radius: 8px; font-size: .78rem; border: 1px solid var(--border); }
+  .bet.revealed .res { display: block; }
+  .bet .res.keep { border-color: var(--safe); background: var(--safe-bg); }
+  .bet .res.maybe { border-color: var(--warn); background: var(--warn-bg); }
+  .bet .res.gone { border-color: var(--danger); background: var(--danger-bg); }
+  .bet .res .src { color: var(--text-dim); font-family: var(--font-mono); font-size: .68rem; display: block; margin-top: 3px; }
+  .bet .res .right { font-weight: 700; }
+  .layers { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: 14px; }
+  .layer { background: var(--bg-surface); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; font-size: .76rem; }
+  .layer h4 { font-size: .8rem; margin-bottom: 4px; }
+  .layer .tag { display: inline-block; font-size: .66rem; border-radius: 6px; padding: 2px 6px; margin-bottom: 6px; border: 1px solid var(--border-strong); color: var(--text-dim); }
+  .layer .tag.in { border-color: var(--safe); color: var(--safe); }
+  .layer .tag.out { border-color: var(--text-dim); }
+
+  ul.refs { list-style: none; font-size: .82rem; }
+  ul.refs li { padding: 5px 0; color: var(--text-dim); }
+  ul.refs li code { color: var(--text); }
+  .kbd { font-family: var(--font-mono); font-size: .72rem; border: 1px solid var(--border-strong); border-bottom-width: 2px; border-radius: 5px; padding: 0 5px; color: var(--text-dim); }
+
+  @media (max-width: 760px) {
+    .gridwrap, .sessgrid { grid-template-columns: minmax(0, 1fr); }
+    .statusbar, .formula { max-width: 100%; }
+    .phases, .layers { grid-template-columns: 1fr 1fr; }
+    .readouts { grid-template-columns: 1fr 1fr; }
+  }
+</style>
+</head>
+<body>
+<button id="theme-toggle" class="theme-toggle" aria-label="Toggle color theme"></button>
+
+<h1>Context Window</h1>
+<p class="subtitle">Everything an agent &ldquo;knows&rdquo; right now has to fit in one request. Watch <b>Hermes Agent</b>&rsquo;s window fill up before you type, grow with every tool call, get <em>compacted</em>, and forget.</p>
+<p class="note">Mechanics and numbers come from the Hermes Agent source at commit <code>7520c4e8</code> (2026-10-15) and its docs. The coding session in part&nbsp;2 is <b>scripted</b>: its messages and their token counts are illustrative; the rules that shrink it are real. Token counts use Hermes&rsquo;s own rough estimator (4&nbsp;characters&nbsp;&asymp;&nbsp;1&nbsp;token).</p>
+
+<!-- 1. FIXED PREFIX -->
+<section class="card">
+  <h2><span class="num">1</span>Before you type: the fixed prefix</h2>
+  <p class="note">A Hermes session sends a <b>system prompt</b> (identity, guidance, coding brief, project rules, skills index, memory) plus the <b>schemas of every enabled tool</b> on <em>every single call</em>, before any conversation. Flip parts off and watch the window react. Hermes&rsquo;s own <code>/context</code> draws the same 100-cell grid: <b>one cell&nbsp;=&nbsp;1% of the window</b>.</p>
+  <div class="row" style="margin:10px 0 12px">
+    <label class="ctl">Context window
+      <select id="winSel">
+        <option value="64000">64,000 (Hermes minimum)</option>
+        <option value="128000">128,000 (DeepSeek / Llama / Qwen class)</option>
+        <option value="200000" selected>200,000 (Claude catch-all)</option>
+        <option value="1000000">1,000,000 (Claude 4.6+ / GPT-4.1 class)</option>
+      </select>
+    </label>
+    <button class="pill-toggle on" data-part="rules" style="--sw: var(--c-rules)"><span class="sw"></span>AGENTS.md <span class="tk" id="tk-rules"></span></button>
+    <button class="pill-toggle on" data-part="skills" style="--sw: var(--c-skills)"><span class="sw"></span>Skills index <span class="tk" id="tk-skills"></span></button>
+    <button class="pill-toggle on" data-part="memory" style="--sw: var(--c-memory)"><span class="sw"></span>Memory <span class="tk" id="tk-memory"></span></button>
+  </div>
+  <div class="row" id="toolsetRow" style="margin-bottom:12px"></div>
+  <div class="gridwrap">
+    <div>
+      <div id="grid1" class="ctxgrid" aria-label="Context window grid, one cell per percent"></div>
+      <div class="gridcap"><span>0</span><span id="grid1cap"></span></div>
+      <div class="legend" id="legend1"></div>
+      <div class="statusbar" id="status1" style="margin-top:10px"></div>
+      <p class="note">That status line is Hermes&rsquo;s own: <code>used/max</code>, a 10-cell bar, and a color that turns yellow at 50%, orange above 80%, red at 95%. Note what it does <em>not</em> say: auto-compaction fires long before red (part&nbsp;3).</p>
+    </div>
+    <div>
+      <div class="big" id="prefixBig">&mdash;<small>tokens sent before your first word</small></div>
+      <table class="ledger" id="ledger1" style="margin-top:10px"></table>
+    </div>
+  </div>
+</section>
+
+<!-- 2. SESSION -->
+<section class="card">
+  <h2><span class="num">2</span>A session fills the window &mdash; and is re-sent every call</h2>
+  <p class="note">Step through a scripted debugging session (<em>&ldquo;the CI is flaky, fix the root cause&rdquo;</em>). Each tool result lands in the window and stays there; each new model call re-sends <b>all of it</b>. Click any message to see what it is and what will happen to it. <span class="kbd">&larr;</span> <span class="kbd">&rarr;</span> step, <span class="kbd">space</span> autoplay.</p>
+  <div class="stepbar">
+    <span class="cnt" id="stepCnt">Step 0/0</span>
+    <button class="btn" id="btnPrev">&laquo; Prev</button>
+    <button class="btn primary" id="btnNext">Next &raquo;</button>
+    <button class="btn" id="btnAuto">Auto-play</button>
+    <button class="btn" id="btnEnd">Jump to end</button>
+    <button class="btn" id="btnReset">Reset</button>
+  </div>
+  <div class="sessgrid">
+    <div>
+      <div id="grid2" class="ctxgrid" aria-label="Context window grid during the session"></div>
+      <div class="gridcap"><span>0</span><span id="grid2cap"></span></div>
+      <div class="legend" id="legend2"></div>
+      <div class="statusbar" id="status2" style="margin-top:8px"></div>
+      <div class="readouts">
+        <div class="ro"><div class="v" id="roCall">&mdash;</div><div class="l">tokens in <b>this</b> API call (prefix + history)</div>
+          <div class="callbar"><div class="cached" id="cbCached" style="width:0"></div><div class="fresh" id="cbFresh" style="width:0"></div></div>
+          <div class="l" id="roCache">cache read &mdash; / new &mdash;</div></div>
+        <div class="ro"><div class="v" id="roSent">&mdash;</div><div class="l">input tokens sent so far, all calls (what you pay for)</div><div class="l" id="roSentCache"></div></div>
+        <div class="ro"><div class="v" id="roTrig">&mdash;</div><div class="l">auto-compaction trigger for this window</div></div>
+        <div class="ro" id="roCmpBox"><div class="v" id="roCmp">0</div><div class="l">compactions so far (the <span class="mono">&#128476;&#65039;&nbsp;N</span> counter in Hermes&rsquo;s status bar)</div></div>
+      </div>
+      <div class="eventlog" id="eventlog"></div>
+    </div>
+    <div>
+      <div class="transcript" id="transcript"></div>
+      <div class="detail" id="detail" style="margin-top:10px"><span class="role">message</span><div>Click a message.</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- 3. COMPACTION -->
+<section class="card">
+  <h2><span class="num">3</span>Compaction: what Hermes keeps, stubs, and summarizes</h2>
+  <p class="note">Hermes does not wait for the window to be full. Its <code>ContextCompressor</code> fires when the prompt reaches a <b>threshold</b> &mdash; default <b>50%</b>, but <b>floored to 75% on any window under 512K</b> &mdash; and runs four phases. Drag the threshold, change the window in part&nbsp;1, or press <em>Compact now</em> (the <code>/compress</code> command) at any step.</p>
+  <div class="row" style="margin:8px 0 12px">
+    <label class="ctl">Configured threshold <input type="range" id="thrSel" min="0.30" max="0.90" step="0.05" value="0.50" /> <b id="thrVal">0.50</b></label>
+    <button class="btn danger" id="btnCompact">Compact now (/compress)</button>
+    <span class="note" id="thrNote" style="margin-top:0"></span>
+  </div>
+  <div class="formula" id="formula"></div>
+  <div class="phases" id="phases"></div>
+  <div class="sumbox" id="sumbox"></div>
+  <p class="note">Why not just let it fill? Longer input is not free even before the hard limit. Chroma&rsquo;s 2025 <em>Context Rot</em> report on 18 models: &ldquo;Models do not use their context uniformly; instead, their performance grows increasingly unreliable as input length grows.&rdquo; Compaction trades exact recall of old turns for a smaller, sharper window.</p>
+</section>
+
+<!-- 4. BETS -->
+<section class="card">
+  <h2><span class="num">4</span>Will it still remember? Place your bets</h2>
+  <p class="note">Seven things entered the window during the session. After a compaction, which does the model still have? Guess, then reveal: the answers come from the compressor&rsquo;s actual rules (head/tail protection, regex-harvested anchors, verbatim user quotes, tool-output stubs, skill pruning, memory reload). <span id="betsState"></span></p>
+  <div class="bets" id="bets"></div>
+  <div class="row" style="margin-top:10px"><button class="btn primary" id="btnReveal">Reveal</button><button class="btn" id="btnBetsReset">Clear guesses</button></div>
+  <h3>Where things actually live: four layers, one window</h3>
+  <div class="layers">
+    <div class="layer"><span class="tag in">in the window</span><h4>Live context</h4>Bounded by the model&rsquo;s window. Rewritten by compaction. The only thing the model sees.</div>
+    <div class="layer"><span class="tag in">in the window (snapshot)</span><h4>MEMORY.md / USER.md</h4>Up to 2,200 + 1,375 chars of curated facts, rendered into the system prompt <em>once</em> at session start. A mid-session save lands on disk but reaches the prompt only when it is rebuilt: next session, or right after a compaction.</div>
+    <div class="layer"><span class="tag out">outside the window</span><h4>Session history (state.db)</h4>Every message ever sent, including compacted ones (<code>active=0, compacted=1</code>). Unbounded, searchable with <code>session_search</code>, but only when the agent decides to look.</div>
+    <div class="layer"><span class="tag in">index in, bodies on demand</span><h4>Skills</h4>Names + one-line descriptions always sit in the prompt. A <code>SKILL.md</code> body enters only when <code>skill_view</code> loads it, and is pruned to a <code>[SKILL_PRUNED: &hellip;]</code> marker at compaction.</div>
+  </div>
+</section>
+
+<!-- SOURCES -->
+<section class="card">
+  <h2><span class="num">5</span>Sources</h2>
+  <ul class="refs">
+    <li>Nous Research, <a href="https://github.com/NousResearch/hermes-agent" target="_blank" rel="noopener">hermes-agent</a> at commit <code>7520c4e8</code> (2026-10-15). Thresholds and budgets: <code>agent/context_compressor.py</code> (threshold floor L1151-1152, trigger math L2770-2809, tail budget L924-930 / L2234-2245, summary budget L819-822 / L2251-2255, pruning L831 / L3285-3323, lean appendices L932-935 / L1029-1030, summary prefix L253-262). Prompt assembly: <code>agent/system_prompt.py</code> L730-806; guidance text and platform hints: <code>agent/prompt_builder.py</code>; coding brief: <code>agent/coding_context.py</code> L84-133; tool-token estimator: <code>agent/model_metadata.py</code> L2615-2670; <code>/context</code> grid and categories: <code>agent/context_breakdown.py</code> L36-56; status-bar bands: <code>hermes_cli/cli_status_bar_mixin.py</code> L49-52; memory caps: <code>cli-config.yaml.example</code> L1005-1007; minimum window: <code>agent/model_metadata.py</code> L272.</li>
+    <li>Hermes docs: <a href="https://hermes-agent.nousresearch.com/docs/developer-guide/context-compression-and-caching" target="_blank" rel="noopener">Context Compression and Caching</a>, <a href="https://hermes-agent.nousresearch.com/docs/developer-guide/prompt-assembly" target="_blank" rel="noopener">Prompt Assembly</a>, <a href="https://hermes-agent.nousresearch.com/docs/user-guide/features/memory" target="_blank" rel="noopener">Persistent Memory</a>, <a href="https://hermes-agent.nousresearch.com/docs/user-guide/cli" target="_blank" rel="noopener">CLI Interface</a> (status bar), <a href="https://hermes-agent.nousresearch.com/docs/guides/troubleshooting-agent-quality" target="_blank" rel="noopener">&ldquo;My Agent Feels Dumber&rdquo;</a>.</li>
+    <li>Prefix sizes were measured statically from that commit (text constants and tool schemas, chars&nbsp;/&nbsp;4): 37 of the 51 core CLI tools resolved; the 14 kanban tools, loaded only for dispatcher workers, were not. Hermes&rsquo;s own code comment puts a full 50+ tool set at &ldquo;20&ndash;30K tokens&rdquo;.</li>
+    <li>Kelly Hong, Anton Troynikov, Jeff Huber (2025). <a href="https://www.trychroma.com/research/context-rot" target="_blank" rel="noopener">Context Rot: How Increasing Input Tokens Impacts LLM Performance</a>. Chroma technical report, 18 models.</li>
+    <li>Shiyang Chen (2026). <a href="https://arxiv.org/abs/2606.22528" target="_blank" rel="noopener">Governance Decay: How Context Compaction Silently Erases Safety Constraints in Long-Horizon LLM Agents</a>. arXiv:2606.22528 &mdash; 1,323 episodes across 7 model families; prohibited-action rate 0% with the policy in context vs 30% after compaction (59% for some models).</li>
+  </ul>
+</section>
+
+<script>
+/* ---------- Theme toggle (self-contained, mirrors hub) ---------- */
+(function () {
+  var KEY = 'playground-theme', ALLOWED = ['light', 'dark'];
+  function validate(v) { return ALLOWED.indexOf(v) >= 0 ? v : null; }
+  function current() { return validate(document.documentElement.getAttribute('data-theme')) || 'dark'; }
+  var btn = document.getElementById('theme-toggle');
+  function render() {
+    var t = current();
+    btn.textContent = t === 'light' ? '🌙' : '☀️';
+    btn.title = t === 'light' ? 'Switch to dark mode' : 'Switch to light mode';
+    btn.setAttribute('aria-pressed', t === 'light' ? 'true' : 'false');
+  }
+  function apply(t) { document.documentElement.setAttribute('data-theme', validate(t) || 'dark'); render(); }
+  btn.addEventListener('click', function () { var n = current() === 'light' ? 'dark' : 'light'; try { localStorage.setItem(KEY, n); } catch (e) {} apply(n); });
+  addEventListener('storage', function (e) { if (e.key !== KEY) return; var v = validate(e.newValue); if (v) apply(v); });
+  addEventListener('pageshow', function () {
+    var s = null; try { s = localStorage.getItem(KEY); } catch (e) {} var v = validate(s);
+    if (!v) { try { v = matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark'; } catch (e) { v = 'dark'; } } apply(v);
+  });
+  try { var mq = matchMedia('(prefers-color-scheme: dark)'); var oc = function () { var s = null; try { s = localStorage.getItem(KEY); } catch (e) {} if (!validate(s)) apply(mq.matches ? 'dark' : 'light'); };
+    if (mq.addEventListener) mq.addEventListener('change', oc); else mq.addListener(oc); } catch (e) {}
+  render();
+})();
+
+/* =====================================================================
+   DATA — Hermes Agent, commit 7520c4e8 (2026-10-15). Tokens = ceil(chars / 4),
+   Hermes's own rough estimator (agent/model_metadata.py CHARS_PER_TOKEN = 4).
+   ===================================================================== */
+var SYSTEM_PARTS = [
+  { id: 'identity', label: 'Identity (default, no SOUL.md)', tokens: 166, src: 'prompt_builder.py L159-168', tier: 'stable' },
+  { id: 'help', label: 'Hermes help pointer', tokens: 150, src: 'prompt_builder.py L170-179', tier: 'stable' },
+  { id: 'guid', label: 'Task-completion + parallel-tool guidance', tokens: 348, src: 'prompt_builder.py (769 + 618 chars)', tier: 'stable' },
+  { id: 'toolg', label: 'Memory / session-search / skills guidance', tokens: 417, src: 'system_prompt.py L274-298', tier: 'stable' },
+  { id: 'steer', label: 'Mid-turn steering note', tokens: 193, src: 'prompt_builder.py L598-615', tier: 'stable' },
+  { id: 'coding', label: 'Coding brief', tokens: 658, src: 'coding_context.py L84-133', tier: 'stable' },
+  { id: 'platform', label: 'Platform hint (CLI)', tokens: 218, src: 'prompt_builder.py PLATFORM_HINTS["cli"]', tier: 'stable' },
+  { id: 'lines', label: 'Workspace snapshot, timestamp, profile, runtime lines', tokens: 150, src: 'not measured — varies per machine; 150 assumed', tier: 'volatile', est: true }
+];
+var SYSTEM_TOKENS = SYSTEM_PARTS.reduce(function (s, p) { return s + p.tokens; }, 0);
+var RULES = { tokens: 2988, label: 'AGENTS.md (project rules; example: the Hermes repo’s own, 11,952 chars)', src: 'context tier; cap = window×4×0.06 chars, clamped 20K–500K' };
+var SKILLS = { tokens: 1444, label: 'Skills index: 58 bundled skills, names + descriptions', src: '## Skills block, prompt_builder.py L1474-1494' };
+// Memory block at session start: 1,320/2,200 chars of MEMORY.md + 820/1,375 of USER.md + headers (caps: cli-config.yaml.example L1005-1007).
+var MEMORY = { chars: 1320 + 820 + 140, tokens: Math.ceil((1320 + 820 + 140) / 4), label: 'Memory snapshot: MEMORY.md 1,320/2,200 + USER.md 820/1,375 chars', src: 'frozen at session start; memory_tool_store.py L618-644' };
+var MEMORY_WRITE_CHARS = 112; // the USER.md entry the agent saves mid-session
+var COMPRESSION_NOTE_TOKENS = 93; // _COMPRESSION_NOTE, context_compressor.py L5352 (370 chars)
+var TOOLSETS = [
+  { id: 'core', label: 'Coding core (file, terminal, skills, memory, session_search, todo, clarify, delegate, execute_code)', tokens: 5690, n: 15, on: true },
+  { id: 'web', label: 'Web (web_search, web_extract)', tokens: 426, n: 2, on: true },
+  { id: 'browser', label: 'Browser (14 tools)', tokens: 3702, n: 14, on: true },
+  { id: 'media', label: 'Media (vision, image, speech)', tokens: 659, n: 3, on: true },
+  { id: 'ops', label: 'cronjob_manage + computer_use + manage_connections', tokens: 4159, n: 3, on: true }
+];
+var SUBAGENT_TOKENS = 41000; // what the delegated sub-agent read in its OWN window (illustrative)
+
+// The scripted session. tokens are illustrative; caps are real: read_file 100,000 chars (25K tok), terminal 50,000 chars (12.5K tok).
+var SCRIPT = [
+  { role: 'user', title: 'Fix the flaky CI test', tokens: 60, facts: ['rule'], text: 'The CI is flaky: tests/test_sync.py::test_retry fails every few runs with ConnectionResetError. Find the root cause and fix it in src/. Rule: don’t modify anything under tests/.' },
+  { role: 'assistant', title: 'search_files("retry", "src/")', tokens: 110, tool: 'search_files', text: 'thinking: Start by locating the retry logic.\n\ntool_call: search_files(pattern="retry", path="src/")' },
+  { role: 'tool', title: 'search_files → 38 matches', tokens: 1400, tool: 'search_files', text: 'src/sync/client.py:41: MAX_RETRIES = 3\nsrc/sync/client.py:42: BACKOFF = 0.5\nsrc/sync/client.py:118: for attempt in range(MAX_RETRIES):\nsrc/sync/transport.py:77: # retry on transient errors\n… 34 more lines' },
+  { role: 'assistant', title: 'read_file src/sync/client.py', tokens: 70, tool: 'read_file', text: 'tool_call: read_file(path="src/sync/client.py")' },
+  { role: 'tool', title: 'read_file → 92,000 chars (1,180 lines)', tokens: 23000, tool: 'read_file', facts: ['file'], text: '[1,180 lines of src/sync/client.py — 92,000 chars. read_file caps at file_read_max_chars = 100,000.]\n\n 41 | MAX_RETRIES = 3\n 42 | BACKOFF = 0.5  # seconds, constant\n…\n118 | for attempt in range(MAX_RETRIES):\n119 |     try:\n120 |         return self._send(req)\n121 |     except ConnectionError:\n122 |         time.sleep(BACKOFF)\n…' },
+  { role: 'assistant', title: 'read_file tests/test_sync.py', tokens: 80, tool: 'read_file', text: 'thinking: Reading tests is fine; editing them is not.\n\ntool_call: read_file(path="tests/test_sync.py")' },
+  { role: 'tool', title: 'read_file → 24,800 chars', tokens: 6200, tool: 'read_file', text: '[tests/test_sync.py — 24,800 chars]\n\ndef test_retry(server):\n    server.drop_first(2)\n    assert client.fetch("/items") == EXPECTED\n…' },
+  { role: 'assistant', title: 'Hypothesis + run the test 20×', tokens: 160, tool: 'terminal', text: 'thinking: Fixed 3 attempts, constant 0.5 s back-off, no jitter; the test server drops 2 connections, so the third attempt races the server’s restart.\n\ntool_call: terminal(command="for i in $(seq 20); do pytest -q tests/test_sync.py::test_retry; done")' },
+  { role: 'tool', title: 'terminal → test log, 50,000 chars [TRUNCATED]', tokens: 12500, tool: 'terminal', facts: ['error'], text: '[OUTPUT TRUNCATED: 50,000-char cap, kept first 40% / last 60%]\n\n.                                                   [100%]\nF                                                   [100%]\n==== FAILURES ====\nFAILED tests/test_sync.py::test_retry - ConnectionResetError: [Errno 54] Connection reset by peer\n… (14 passed, 6 failed)' },
+  { role: 'assistant', title: 'skill_view("python-debugpy")', tokens: 50, tool: 'skill_view', text: 'tool_call: skill_view(name="python-debugpy")' },
+  { role: 'tool', title: 'skill_view → SKILL.md body (14,984 chars)', tokens: 3746, tool: 'skill_view', facts: ['skill'], kind: 'skill', text: '# python-debugpy\nDebug Python: pdb REPL + debugpy remote (DAP).\n\n[The bundled skill body: 14,984 chars. Loaded into context on demand; stays for the rest of the session unless compaction prunes it.]' },
+  { role: 'assistant', title: 'read_file src/sync/transport.py', tokens: 90, tool: 'read_file', text: 'tool_call: read_file(path="src/sync/transport.py")' },
+  { role: 'tool', title: 'read_file → 84,000 chars', tokens: 21000, tool: 'read_file', text: '[src/sync/transport.py — 84,000 chars]\n\nclass Transport:\n    def __init__(self, pool_size=1, keepalive=False): …' },
+  { role: 'assistant', title: 'Save a memory + patch client.py', tokens: 220, tool: 'memory', facts: ['backoff', 'mem'], text: 'tool_call: memory(action="add", target="user", content="CI is GitHub Actions; network tests are flaky. Standing rule: never edit tests/ — fix root causes in src/.")\n\ntool_call: patch(path="src/sync/client.py", …)\n  - BACKOFF = 0.5  # constant\n  + # exponential back-off with full jitter: base 0.5 s, cap 8 s; keep MAX_RETRIES = 3' },
+  { role: 'tool', title: 'memory → saved (USER.md 932/1,375 chars)', tokens: 30, tool: 'memory', kind: 'memory', text: 'Saved to USER.md. Memory at 932/1,375 chars.\n\n[On disk now. NOT in the system prompt: that was rendered once at session start.]' },
+  { role: 'tool', title: 'patch → ok', tokens: 40, tool: 'patch', text: 'Applied 1 hunk to src/sync/client.py.' },
+  { role: 'assistant', title: 'Run the test 20× again', tokens: 60, tool: 'terminal', text: 'tool_call: terminal(command="for i in $(seq 20); do pytest -q tests/test_sync.py::test_retry; done")' },
+  { role: 'tool', title: 'terminal → test log (2 failures left)', tokens: 9800, tool: 'terminal', text: '… 18 passed, 2 failed\nFAILED tests/test_sync.py::test_retry - ConnectionResetError: [Errno 54] Connection reset by peer' },
+  { role: 'assistant', title: 'delegate_task: research urllib3 Retry', tokens: 90, tool: 'delegate_task', text: 'tool_call: delegate_task(goal="How does urllib3.Retry compute back-off and does it reset per connection? Report in ≤300 words", toolsets=["web"], role="leaf")' },
+  { role: 'tool', title: 'delegate_task → 480-token report (sub-agent read 41,000 tokens)', tokens: 480, tool: 'delegate_task', kind: 'subagent', text: '[Sub-agent summary — 480 tokens]\nurllib3.Retry computes backoff_factor * 2**(n-1) with optional jitter; the counter is per-request, not per-connection; ECONNRESET is retried only when raise_on_status is False …\n\n[The sub-agent itself read ~41,000 tokens of docs in ITS OWN window. Only this summary entered yours.]' },
+  { role: 'assistant', title: 'web_search', tokens: 60, tool: 'web_search', text: 'tool_call: web_search(query="urllib3 Retry backoff jitter ECONNRESET keepalive")' },
+  { role: 'tool', title: 'web_search → 10 results', tokens: 1800, tool: 'web_search', text: '1. urllib3.util.retry — Retry …\n2. Connection reset by peer with keep-alive …\n…' },
+  { role: 'assistant', title: 'web_extract urllib3 docs', tokens: 60, tool: 'web_extract', text: 'tool_call: web_extract(urls=["https://urllib3.readthedocs.io/en/stable/reference/urllib3.util.html"])' },
+  { role: 'tool', title: 'web_extract → page text, 44,000 chars', tokens: 11000, tool: 'web_extract', text: '[urllib3.util reference — 44,000 chars of page text]' },
+  { role: 'assistant', title: 'read_file src/sync/pool.py', tokens: 80, tool: 'read_file', text: 'tool_call: read_file(path="src/sync/pool.py")' },
+  { role: 'tool', title: 'read_file → 84,000 chars', tokens: 21000, tool: 'read_file', text: '[src/sync/pool.py — 84,000 chars]' },
+  { role: 'assistant', title: 'Root cause found: patch transport.py + pool.py', tokens: 280, tool: 'patch', text: 'thinking: The real bug: the pool hands out a connection the server already closed after keep-alive idle; the retry just hits it again.\n\ntool_call: patch(path="src/sync/transport.py", …)  # retry on ECONNRESET at the transport layer, pool maxsize 10, keep-alive 30 s\ntool_call: patch(path="src/sync/pool.py", …)       # drop idle connections > 30 s' },
+  { role: 'tool', title: 'patch → ok (2 files)', tokens: 40, tool: 'patch', text: 'Applied 2 hunks.' },
+  { role: 'assistant', title: 'Run the test 20×', tokens: 50, tool: 'terminal', text: 'tool_call: terminal(command="for i in $(seq 20); do pytest -q tests/test_sync.py::test_retry; done")' },
+  { role: 'tool', title: 'terminal → 20 passed [TRUNCATED]', tokens: 12500, tool: 'terminal', text: '[OUTPUT TRUNCATED: 50,000-char cap]\n… 20 passed in 48.1s' },
+  { role: 'assistant', title: 'git diff --stat', tokens: 60, tool: 'terminal', text: 'tool_call: terminal(command="git diff --stat && git log --oneline -3")' },
+  { role: 'tool', title: 'terminal → diff stat', tokens: 2400, tool: 'terminal', text: ' src/sync/client.py    | 14 ++++---\n src/sync/transport.py | 31 +++++++++---\n src/sync/pool.py      | 22 ++++++--\n 3 files changed, 52 insertions(+), 15 deletions(-)' },
+  { role: 'user', title: 'Open a PR, link #4821, keep the retry limit', tokens: 45, facts: ['pr'], text: 'Nice. Open a PR against main that links issue #4821. Keep the retry limit as it is.' },
+  { role: 'assistant', title: 'gh pr create', tokens: 120, tool: 'terminal', text: 'tool_call: terminal(command="git checkout -b fix/sync-conn-reset && git commit -am ‘sync: retry at transport layer, drop idle pooled connections’ && gh pr create --title ‘Fix flaky test_retry (ECONNRESET)’ --body ‘Closes #4821’")' },
+  { role: 'tool', title: 'terminal → PR #4833 created', tokens: 60, tool: 'terminal', text: 'https://github.com/acme/syncd/pull/4833' },
+  { role: 'assistant', title: 'Final report', tokens: 380, text: 'Root cause: the connection pool reused keep-alive connections the server had already closed after 30 s idle; the retry loop then re-sent on a dead socket. Fixed at the transport layer (retry on ECONNRESET, pool maxsize 10, keep-alive 30 s) and in pool.py (drop idle > 30 s). Kept MAX_RETRIES = 3; back-off is now exponential with full jitter (base 0.5 s, cap 8 s). tests/ untouched. 20/20 green. PR #4833 (closes #4821).' },
+  { role: 'user', title: 'Recall check', tokens: 40, text: 'Quick check before I go: what retry limit did we keep, which files changed, and what was the failing test’s exact error?' }
+];
+
+var FACTS = [
+  { id: 'rule', q: 'The user’s rule “don’t modify anything under tests/”', where: 'user message #1' },
+  { id: 'file', q: 'The path src/sync/client.py', where: 'tool result #5 (read_file) and later messages' },
+  { id: 'error', q: 'The failing test’s exact error line: ConnectionResetError: [Errno 54] Connection reset by peer', where: 'tool result #9 (terminal log)' },
+  { id: 'backoff', q: 'The chosen back-off numbers: base 0.5 s, cap 8 s, full jitter', where: 'assistant message #14' },
+  { id: 'skill', q: 'The python-debugpy skill body (14,984 chars)', where: 'tool result #11 (skill_view)' },
+  { id: 'pr', q: 'Issue #4821 and PR #4833', where: 'user message #33 and tool result #36' },
+  { id: 'mem', q: 'The memory the agent saved mid-session (“never edit tests/”)', where: 'memory tool call #14 → USER.md on disk' }
+];
+
+/* =====================================================================
+   HERMES RULES (agent/context_compressor.py @ 7520c4e8)
+   ===================================================================== */
+var MINIMUM_CONTEXT_LENGTH = 64000;         // model_metadata.py L272
+var SMALL_CTX_WINDOW_LIMIT = 512000, SMALL_CTX_THRESHOLD = 0.75;   // L1151-1152
+var MIN_CTX_TRIGGER_RATIO = 0.85;           // L2726
+var LEAN_TAIL_FLOOR = 10000, LEAN_TAIL_CAP = 25000, TAIL_MAX_FRACTION = 0.20;  // L924-930
+var PROTECT_FIRST_N = 3, PROTECT_LAST_N = 20, MAX_TAIL_MESSAGE_FLOOR = 8;      // L2812, L1136
+var MIN_SUMMARY_TOKENS = 2000, SUMMARY_RATIO = 0.20, SUMMARY_TOKENS_CEILING = 10000; // L819-822
+var PRUNE_MIN_TOKENS = 50;                  // _PRUNE_MIN_CHARS = 200 chars (L841)
+var LEAN_TAIL_KEEP_TOOL_ROUNDS = 6, LEAN_TAIL_DEMOTE_MIN_TOKENS = 375;  // context_compressor_tail.py L10-11 (1,500 chars)
+var STUB_TOKENS = 12, DUP_STUB_TOKENS = 14, SKILL_STUB_TOKENS = 30, DEMOTE_STUB_TOKENS = 40, RECOVERY_FOOTER_TOKENS = 60;
+
+function effectivePercent(W, p) { return (W && W < SMALL_CTX_WINDOW_LIMIT) ? Math.max(p, SMALL_CTX_THRESHOLD) : p; }
+function thresholdTokens(W, p) {
+  var pct = effectivePercent(W, p);
+  var base = Math.floor(W * pct);
+  var floored = Math.max(base, MINIMUM_CONTEXT_LENGTH);
+  var cap = Math.floor(W * MIN_CTX_TRIGGER_RATIO);
+  if (floored > base && floored > cap) floored = Math.max(base, cap);
+  if (floored >= W) return Math.max(1, Math.min(cap, W - 1));
+  return floored;
+}
+function tailBudget(W) {
+  var b = Math.max(LEAN_TAIL_FLOOR, Math.min(LEAN_TAIL_CAP, Math.floor(W * 0.025)));
+  return Math.min(b, Math.floor(W * TAIL_MAX_FRACTION));
+}
+function maxSummaryTokens(W) { return Math.min(Math.floor(W * 0.05), SUMMARY_TOKENS_CEILING); }
+function summaryBudget(W, contentTokens) { return Math.max(MIN_SUMMARY_TOKENS, Math.min(Math.floor(contentTokens * SUMMARY_RATIO), maxSummaryTokens(W))); }
+
+/* ---------- state ---------- */
+var state = {
+  W: 200000, p: 0.50, step: -1,
+  parts: { rules: true, skills: true, memory: true },
+  toolsets: {}, forced: {} // forced[stepIndex] = true => manual /compress before that step's call
+};
+TOOLSETS.forEach(function (t) { state.toolsets[t.id] = t.on; });
+
+function fmt(n) { return Math.round(n).toLocaleString('en-US'); }
+function fmtK(n) { return n >= 1000000 ? (n / 1000000).toFixed(n % 1000000 ? 1 : 0) + 'M' : n >= 1000 ? (n / 1000).toFixed(n >= 10000 ? 0 : 1) + 'K' : String(n); }
+function pct(n, W) { return Math.round(n / W * 100); }
+
+function prefix(st, memExtraChars, compacted) {
+  var tools = TOOLSETS.reduce(function (s, t) { return s + (st.toolsets[t.id] ? t.tokens : 0); }, 0);
+  var memChars = MEMORY.chars + (memExtraChars || 0);
+  var memory = st.parts.memory ? Math.ceil(memChars / 4) : 0;
+  var system = SYSTEM_TOKENS + (compacted ? COMPRESSION_NOTE_TOKENS : 0);
+  var rules = st.parts.rules ? RULES.tokens : 0;
+  var skills = st.parts.skills ? SKILLS.tokens : 0;
+  return { system: system, tools: tools, rules: rules, skills: skills, memory: memory, memChars: memChars,
+    total: system + tools + rules + skills + memory };
+}
+
+/* ---------- simulation ---------- */
+function makeMsg(src, idx) {
+  return { id: idx, role: src.role, title: src.title, tokens: src.tokens, text: src.text, tool: src.tool, kind: src.kind || (src.role === 'tool' ? 'tool_result' : src.role), facts: src.facts || [], status: 'live' };
+}
+function isToolResult(m) { return m.role === 'tool' && m.kind !== 'summary'; }
+function groupStart(msgs, i) { // a tool result belongs to the assistant call before it
+  while (i > 0 && isToolResult(msgs[i])) i--;
+  return i;
+}
+function compress(msgs, W, compressionCount, memChars, log) {
+  var headN = compressionCount === 0 ? PROTECT_FIRST_N : 0; // decays to 0 after the first compaction (L4647-4666)
+  if (msgs.length <= headN + 3 + 1) return null;                 // Phase 0 size check (L5556-5562)
+  // ---- Phase 2 boundaries: tail by token budget, aligned to tool groups, count floor, last user kept
+  var budget = tailBudget(W), acc = 0, s = msgs.length;
+  while (s > headN) {
+    var gs = groupStart(msgs, s - 1);
+    var gtok = 0; for (var k = gs; k < s; k++) gtok += msgs[k].tokens;
+    if (acc + gtok > budget && (msgs.length - gs) > Math.min(PROTECT_LAST_N, MAX_TAIL_MESSAGE_FLOOR)) break;
+    acc += gtok; s = gs;
+  }
+  // min_tail_user_messages = 1: the tail anchors on the last REAL user message (a summary row is not one)
+  function realUser(m) { return m.role === 'user' && m.kind !== 'summary'; }
+  var hasUser = false; for (var u = s; u < msgs.length; u++) if (realUser(msgs[u])) hasUser = true;
+  if (!hasUser) { for (var u2 = s - 1; u2 > headN; u2--) if (realUser(msgs[u2])) { s = u2; break; } }
+  if (s <= headN) return null;
+  var head = msgs.slice(0, headN), middle = msgs.slice(headN, s), tail = msgs.slice(s);
+  // pass 4: pressure-demote tool bodies INSIDE the tail when the tail alone exceeds the soft ceiling (1.5x budget), keeping the newest 3 rows
+  var tailTok = tail.reduce(function (a, m) { return a + m.tokens; }, 0), pressured = 0;
+  if (tailTok > budget * 1.5) {
+    for (var q = 0; q < tail.length - 3; q++) {
+      if (isToolResult(tail[q]) && tail[q].status === 'live' && tail[q].tokens > PRUNE_MIN_TOKENS) { tail[q] = Object.assign({}, tail[q], { status: 'demoted', tokens: DEMOTE_STUB_TOKENS }); pressured++; }
+    }
+  }
+  // ---- Phase 1 prune (no LLM): old tool results outside the tail -> stubs; duplicates -> back-reference; skills -> SKILL_PRUNED
+  var seen = {}, pruned = 0, dedup = 0, skills = 0;
+  middle = middle.map(function (m) {
+    if (!isToolResult(m) || m.status !== 'live' || m.tokens <= PRUNE_MIN_TOKENS) return m;
+    var c = Object.assign({}, m);
+    if (m.kind === 'skill') { c.status = 'skill_pruned'; c.tokens = SKILL_STUB_TOKENS; skills++; }
+    else if (seen[m.text]) { c.status = 'dup'; c.tokens = DUP_STUB_TOKENS; dedup++; }
+    else { c.status = 'pruned'; c.tokens = STUB_TOKENS; pruned++; }
+    seen[m.text] = true; return c;
+  });
+  // lean tail: demote tool results older than the newest 6 rounds and >= 1,500 chars
+  var rounds = 0, demoted = 0;
+  for (var t = tail.length - 1; t >= 0; t--) {
+    if (tail[t].role === 'assistant' && tail[t].tool) rounds++;
+    if (isToolResult(tail[t]) && tail[t].status === 'live' && rounds > LEAN_TAIL_KEEP_TOOL_ROUNDS && tail[t].tokens >= LEAN_TAIL_DEMOTE_MIN_TOKENS) {
+      tail[t] = Object.assign({}, tail[t], { status: 'demoted', tokens: DEMOTE_STUB_TOKENS }); demoted++;
+    }
+  }
+  // ---- Phase 3 summary (one auxiliary-LLM call) + lean mechanical appendices
+  var content = middle.reduce(function (a, m) { return a + m.tokens; }, 0);
+  var llm = summaryBudget(W, content);
+  var anchors = {}, facts = {}, userQuotes = 0, rowsIn = 0;
+  middle.forEach(function (m) {
+    rowsIn++;
+    if (m.role === 'user' && m.kind !== 'summary') userQuotes += m.tokens;
+    if (m.kind === 'summary') userQuotes += m.userQuotes || 0; // the previous summary's verbatim quotes are carried forward
+    (m.facts || []).forEach(function (f) { facts[f] = true; });
+    if (m.kind === 'summary' && m.carried) { Object.keys(m.carried).forEach(function (f) { facts[f] = true; }); }
+  });
+  // regex anchors (files / PRs / errors) are harvested mechanically from the compacted region
+  var anchorTok = (facts.file ? 20 : 0) + (facts.pr ? 12 : 0) + (facts.error ? 40 : 0) + 30;
+  var sumTok = llm + anchorTok + userQuotes + RECOVERY_FOOTER_TOKENS;
+  var summary = { id: 'S' + (compressionCount + 1), role: 'user', kind: 'summary', title: '[CONTEXT COMPACTION — REFERENCE ONLY] summary of ' + rowsIn + ' rows', tokens: sumTok,
+    status: 'live', facts: [], carried: facts, llm: llm, anchorTok: anchorTok, userQuotes: userQuotes, rowsIn: rowsIn, contentTokens: content, text: '' };
+  var before = msgs.reduce(function (a, m) { return a + m.tokens; }, 0);
+  var out = head.concat([summary], tail);
+  var after = out.reduce(function (a, m) { return a + m.tokens; }, 0);
+  log.push({ pruned: pruned, dedup: dedup, skills: skills, demoted: demoted + pressured, head: head.length, tailRows: tail.length, middleRows: rowsIn, content: content, llm: llm, sumTok: sumTok, before: before, after: after, tailBudget: budget });
+  return out;
+}
+
+function simulate(st) {
+  var msgs = [], calls = [], compactions = [], events = [], memExtra = 0, count = 0, prevWire = null, prevPrefix = null;
+  var sentTotal = 0, sentCached = 0, ineffective = 0, tripped = false;
+  var thr = thresholdTokens(st.W, st.p);
+  for (var i = 0; i <= st.step && i < SCRIPT.length; i++) {
+    var src = SCRIPT[i];
+    if (src.role === 'assistant') {
+      // before each model call: preflight compaction gate, then the call itself
+      var pre = prefix(st, memExtra, count > 0);
+      var hist = msgs.reduce(function (a, m) { return a + m.tokens; }, 0);
+      var forced = !!st.forced[i];
+      if (((pre.total + hist >= thr && !tripped) || forced) && msgs.length) {
+        var cl = [];
+        var res = compress(msgs, st.W, count, MEMORY.chars + memExtra, cl);
+        if (res) {
+          msgs = res; count++;
+          var info = cl[0]; info.step = i; info.forced = forced; info.trigger = thr; info.prompt = pre.total + hist;
+          compactions.push(info);
+          pre = prefix(st, memExtra, true); // system prompt rebuilt: compaction note + memory reloaded from disk
+          hist = msgs.reduce(function (a, m) { return a + m.tokens; }, 0);
+          var still = pre.total + hist >= thr;
+          ineffective = still ? ineffective + 1 : 0;   // provider-confirmed "ineffective" strikes reset on a successful pass
+          events.push({ step: i, cmp: true, text: (forced ? '/compress' : 'auto-compaction #' + count) + ': ' + fmt(info.before) + ' → ' + fmt(info.after) + ' history tokens; ' + info.middleRows + ' rows → 1 summary (' + fmt(info.sumTok) + ' tok); ' + info.pruned + ' tool outputs stubbed' + (info.skills ? ', ' + info.skills + ' skill pruned' : '') + (info.demoted ? ', ' + info.demoted + ' tail outputs demoted' : '') + (still ? ' — still over the trigger (ineffective strike ' + ineffective + ')' : '') });
+          if (ineffective >= 2 && !tripped) { tripped = true; events.push({ step: i, cmp: true, text: 'anti-thrash breaker tripped after 2 ineffective compactions: auto-compaction is off until the session is reset (/new); the window keeps growing toward a provider overflow' }); }
+        } else if (forced) {
+          events.push({ step: i, cmp: false, text: '/compress: nothing to compact yet (the protected head and tail cover every row)' });
+        }
+      }
+      // cache accounting: Anthropic-style breakpoints — static system prefix, end of system, last 2 messages
+      var wireIds = msgs.map(function (m) { return m.id + ':' + m.status; });
+      var cached = 0;
+      if (prevWire) {
+        var samePrefix = prevPrefix && prevPrefix.total === pre.total;
+        cached += samePrefix ? pre.total : (pre.tools + SYSTEM_TOKENS); // stable tier + tools survive; rest re-rendered
+        var j = 0; while (j < wireIds.length && j < prevWire.length && wireIds[j] === prevWire[j]) { cached += msgs[j].tokens; j++; }
+      }
+      var total = pre.total + hist;
+      cached = Math.min(cached, total);
+      calls.push({ step: i, total: total, cached: cached, fresh: total - cached, prefix: pre });
+      sentTotal += total; sentCached += cached;
+      prevWire = wireIds; prevPrefix = pre;
+      msgs.push(makeMsg(src, i));
+    } else {
+      msgs.push(makeMsg(src, i));
+      if (src.role === 'tool' && src.kind === 'memory') memExtra += MEMORY_WRITE_CHARS; // written to disk
+    }
+  }
+  var pre2 = prefix(st, memExtra, count > 0);
+  var hist2 = msgs.reduce(function (a, m) { return a + m.tokens; }, 0);
+  return { msgs: msgs, calls: calls, compactions: compactions, events: events, prefix: pre2, hist: hist2, total: pre2.total + hist2,
+    thr: thr, count: count, sentTotal: sentTotal, sentCached: sentCached, memExtra: memExtra, ineffective: ineffective, tripped: tripped };
+}
+
+/* ---------- rendering helpers ---------- */
+var CATS = [
+  { id: 'system', label: 'System prompt', glyph: '■', sw: 'var(--c-system)' },
+  { id: 'tools', label: 'Tool definitions', glyph: '▣', sw: 'var(--c-tools)' },
+  { id: 'rules', label: 'Rules (AGENTS.md)', glyph: '▩', sw: 'var(--c-rules)' },
+  { id: 'skills', label: 'Skills index', glyph: '▤', sw: 'var(--c-skills)' },
+  { id: 'memory', label: 'Memory', glyph: '▧', sw: 'var(--c-memory)' },
+  { id: 'user', label: 'Conversation: user', glyph: '▨', sw: 'var(--c-user)' },
+  { id: 'assistant', label: 'Conversation: assistant', glyph: '▨', sw: 'var(--c-assistant)' },
+  { id: 'tool', label: 'Conversation: tool results', glyph: '▨', sw: 'var(--c-tool)' },
+  { id: 'summary', label: 'Compaction summary', glyph: '▨', sw: 'var(--c-summary)' },
+  { id: 'stub', label: 'Stubbed tool output', glyph: '▨', sw: 'var(--c-stub)' }
+];
+function buildGrid(el) { el.innerHTML = ''; for (var i = 0; i < 100; i++) { var c = document.createElement('div'); c.className = 'cell'; el.appendChild(c); } }
+function paintGrid(el, counts, W, thr) {
+  // Hermes: cells = round(tokens / window * 100), never 0 for a nonzero category (context_breakdown.py)
+  var cells = el.children, idx = 0, trigCell = Math.min(99, Math.floor(thr / W * 100));
+  var order = ['system', 'tools', 'rules', 'skills', 'memory', 'user', 'assistant', 'tool', 'summary', 'stub'];
+  var plan = [];
+  order.forEach(function (k) { var t = counts[k] || 0; if (t <= 0) return; var n = Math.round(t / W * 100) || 1; plan.push([k, n]); });
+  var total = plan.reduce(function (a, p) { return a + p[1]; }, 0);
+  if (total > 100) { var last = plan[plan.length - 1]; last[1] = Math.max(0, last[1] - (total - 100)); }
+  plan.forEach(function (p) { var sw = CATS.filter(function (c) { return c.id === p[0]; })[0].sw; for (var n = 0; n < p[1] && idx < 100; n++, idx++) { cells[idx].style.background = sw; cells[idx].className = 'cell' + (idx >= trigCell ? ' zone' : '') + (idx === trigCell ? ' trig' : ''); } });
+  for (; idx < 100; idx++) { cells[idx].style.background = ''; cells[idx].className = 'cell' + (idx >= trigCell ? ' zone' : '') + (idx === trigCell ? ' trig' : ''); }
+}
+function legendHTML(keys) {
+  return CATS.filter(function (c) { return keys.indexOf(c.id) >= 0; }).map(function (c) { return '<span><i class="swatch" style="--sw:' + c.sw + '"></i>' + (c.glyph ? '<span class="glyph">' + c.glyph + '</span> ' : '') + c.label + '</span>'; }).join('') +
+    '<span><i class="swatch" style="--sw:var(--c-free)"></i><span class="glyph">·</span> free</span><span><i class="swatch" style="--sw:var(--c-free);background-image:repeating-linear-gradient(135deg,transparent 0 3px,rgba(255,107,107,.5) 3px 5px)"></i> beyond the auto-compaction trigger</span>';
+}
+function statusHTML(used, W, model, count) {
+  var p = pct(used, W), filled = Math.min(10, Math.round(p / 10));
+  var cls = p >= 95 ? 'critical' : p > 80 ? 'bad' : p >= 50 ? 'warn' : 'good';   // cli_status_bar_mixin.py L49-52
+  var bar = '[' + '█'.repeat(filled) + '░'.repeat(10 - filled) + ']';
+  return '☤ ' + model + '<span class="sep">│</span>' + fmtK(used) + '/' + fmtK(W) + '<span class="sep">│</span><span class="' + cls + '"><span class="bar">' + bar + '</span> ' + p + '%</span>' +
+    (count ? '<span class="sep">│</span>🗜️ ' + count : '') + '<span class="sep">│</span>$0.00<span class="sep">│</span>' + Math.max(1, Math.round((state.step + 1) * 0.6)) + 'm';
+}
+
+/* ---------- section 1 ---------- */
+var grid1 = document.getElementById('grid1'), grid2 = document.getElementById('grid2');
+buildGrid(grid1); buildGrid(grid2);
+document.getElementById('legend1').innerHTML = legendHTML(['system', 'tools', 'rules', 'skills', 'memory']);
+document.getElementById('legend2').innerHTML = legendHTML(['system', 'tools', 'rules', 'skills', 'memory', 'user', 'assistant', 'tool', 'summary', 'stub']);
+var toolsetRow = document.getElementById('toolsetRow');
+TOOLSETS.forEach(function (t) {
+  var b = document.createElement('button'); b.className = 'pill-toggle' + (t.on ? ' on' : ''); b.style.setProperty('--sw', 'var(--c-tools)');
+  b.innerHTML = '<span class="sw"></span>' + t.label.split(' (')[0] + ' <span class="tk">' + fmt(t.tokens) + '</span>'; b.title = t.label + ' — ' + t.n + ' tools, ' + fmt(t.tokens) + ' tokens of JSON schema';
+  b.addEventListener('click', function () { state.toolsets[t.id] = !state.toolsets[t.id]; b.classList.toggle('on', state.toolsets[t.id]); renderAll(); });
+  toolsetRow.appendChild(b);
+});
+document.querySelectorAll('.pill-toggle[data-part]').forEach(function (b) {
+  b.addEventListener('click', function () { var k = b.getAttribute('data-part'); state.parts[k] = !state.parts[k]; b.classList.toggle('on', state.parts[k]); renderAll(); });
+});
+document.getElementById('tk-rules').textContent = fmt(RULES.tokens); document.getElementById('tk-skills').textContent = fmt(SKILLS.tokens); document.getElementById('tk-memory').textContent = fmt(MEMORY.tokens);
+document.getElementById('winSel').addEventListener('change', function (e) { state.W = parseInt(e.target.value, 10); renderAll(); });
+
+function renderSection1() {
+  var pre = prefix(state, 0, false), thr = thresholdTokens(state.W, state.p);
+  paintGrid(grid1, { system: pre.system, tools: pre.tools, rules: pre.rules, skills: pre.skills, memory: pre.memory }, state.W, thr);
+  document.getElementById('grid1cap').textContent = fmt(state.W) + ' tokens · 1 cell = ' + fmt(state.W / 100) + ' tokens · auto-compaction at ' + fmt(thr) + ' (' + pct(thr, state.W) + '%)';
+  document.getElementById('status1').innerHTML = statusHTML(pre.total, state.W, 'claude-sonnet-4-6', 0);
+  document.getElementById('prefixBig').innerHTML = fmt(pre.total) + ' <span style="font-size:1rem;color:var(--text-dim)">(' + pct(pre.total, state.W) + '% of the window)</span><small>tokens sent before your first word — and again on every call after it</small>';
+  var rows = '<tr><th>What</th><th style="text-align:right">Tokens</th><th>Where it comes from</th></tr>';
+  SYSTEM_PARTS.forEach(function (p) { rows += '<tr><td><i class="swatch" style="--sw:var(--c-system);vertical-align:-1px;margin-right:5px"></i>' + p.label + (p.est ? ' <span style="color:var(--text-dim)">(estimate)</span>' : '') + '</td><td class="n">' + fmt(p.tokens) + '</td><td class="src">' + p.src + '</td></tr>'; });
+  var toolsOn = TOOLSETS.filter(function (t) { return state.toolsets[t.id]; });
+  rows += '<tr' + (toolsOn.length ? '' : ' class="off"') + '><td><i class="swatch" style="--sw:var(--c-tools);vertical-align:-1px;margin-right:5px"></i>Tool schemas: ' + toolsOn.reduce(function (s, t) { return s + t.n; }, 0) + ' tools (JSON schema per tool, sent as the <code>tools</code> array)</td><td class="n">' + fmt(pre.tools) + '</td><td class="src">measured per tool; Hermes’s own comment: 50+ tools ≈ 20–30K</td></tr>';
+  rows += '<tr' + (state.parts.rules ? '' : ' class="off"') + '><td><i class="swatch" style="--sw:var(--c-rules);vertical-align:-1px;margin-right:5px"></i>' + RULES.label + '</td><td class="n">' + fmt(RULES.tokens) + '</td><td class="src">' + RULES.src + '</td></tr>';
+  rows += '<tr' + (state.parts.skills ? '' : ' class="off"') + '><td><i class="swatch" style="--sw:var(--c-skills);vertical-align:-1px;margin-right:5px"></i>' + SKILLS.label + '</td><td class="n">' + fmt(SKILLS.tokens) + '</td><td class="src">' + SKILLS.src + '</td></tr>';
+  rows += '<tr' + (state.parts.memory ? '' : ' class="off"') + '><td><i class="swatch" style="--sw:var(--c-memory);vertical-align:-1px;margin-right:5px"></i>' + MEMORY.label + '</td><td class="n">' + fmt(MEMORY.tokens) + '</td><td class="src">' + MEMORY.src + '</td></tr>';
+  rows += '<tr class="total"><td>Fixed prefix, every call</td><td class="n">' + fmt(pre.total) + '</td><td class="src">' + pct(pre.total, state.W) + '% of ' + fmtK(state.W) + '</td></tr>';
+  document.getElementById('ledger1').innerHTML = rows;
+}
+
+/* ---------- section 2 ---------- */
+var sim = null, selectedId = null, autoTimer = null;
+var transcriptEl = document.getElementById('transcript'), detailEl = document.getElementById('detail');
+function zoneOf(sim, idx) {
+  if (!sim.compactions.length) return '';
+  var m = sim.msgs[idx]; if (m.kind === 'summary') return 'summary';
+  var last = sim.compactions[sim.compactions.length - 1];
+  if (idx < last.head) return 'head';
+  // everything after the summary row is tail
+  var sIdx = -1; for (var i = 0; i < sim.msgs.length; i++) if (sim.msgs[i].kind === 'summary') sIdx = i;
+  return idx > sIdx ? 'tail' : '';
+}
+function roleColor(m) {
+  if (m.kind === 'summary') return 'var(--c-summary)';
+  if (m.status !== 'live') return 'var(--c-stub)';
+  return m.role === 'user' ? 'var(--c-user)' : m.role === 'assistant' ? 'var(--c-assistant)' : 'var(--c-tool)';
+}
+function renderTranscript() {
+  transcriptEl.innerHTML = '';
+  if (!sim.msgs.length) { transcriptEl.innerHTML = '<div class="note" style="margin:0">Press <b>Next</b> to send the first message. The fixed prefix from part 1 is already in the window.</div>'; return; }
+  var lastZone = null;
+  sim.msgs.forEach(function (m, idx) {
+    var z = zoneOf(sim, idx);
+    if (sim.compactions.length && z !== lastZone) { var zl = document.createElement('div'); zl.className = 'zonelbl'; zl.textContent = z === 'head' ? 'protected head (system + first ' + PROTECT_FIRST_N + ' rows, first compaction only)' : z === 'summary' ? 'summary row' : z === 'tail' ? 'protected tail (token-budgeted, verbatim)' : ''; if (zl.textContent) transcriptEl.appendChild(zl); lastZone = z; }
+    var d = document.createElement('div');
+    d.className = 'msg' + (m.status !== 'live' ? ' stub' : '') + (m.kind === 'summary' ? ' summary' : '') + (z === 'head' ? ' head' : z === 'tail' ? ' tail' : '') + (m.kind === 'subagent' ? ' ghost' : '') + (selectedId === m.id ? ' sel' : '');
+    d.style.setProperty('--c', roleColor(m));
+    var h = m.kind === 'summary' ? 44 : Math.max(18, Math.min(110, 18 + m.tokens / 260));
+    d.style.height = h + 'px';
+    var lbl = m.kind === 'summary' ? 'compaction' : m.role;
+    var title = m.status === 'pruned' ? '[Old tool output cleared to save context space]' : m.status === 'dup' ? '[Duplicate tool output — same content as a more recent call]' : m.status === 'skill_pruned' ? '[SKILL_PRUNED: content lost in compression; reload with skill_view(name=’python-debugpy’)]' : m.status === 'demoted' ? '[' + m.tool + ' output demoted at compaction — chars preserved in session history]' : m.title;
+    d.innerHTML = '<span class="t"><b>' + lbl + '</b> · ' + title + '</span><span class="k">' + fmt(m.tokens) + '</span>';
+    d.addEventListener('click', function () { selectedId = m.id; renderTranscript(); renderDetail(m, idx); });
+    transcriptEl.appendChild(d);
+  });
+  if (selectedId === null) { transcriptEl.scrollTop = transcriptEl.scrollHeight; }
+}
+function fateText(m, idx) {
+  var W = state.W, budget = tailBudget(W);
+  if (m.kind === 'summary') return 'This row replaced ' + m.rowsIn + ' rows (' + fmt(m.contentTokens) + ' tokens after pruning). Budget: max(2,000, min(20% × ' + fmt(m.contentTokens) + ', min(5% × ' + fmtK(W) + ', 10,000))) = ' + fmt(m.llm) + ' tokens of LLM summary, plus mechanical appendices: anchor index ' + fmt(m.anchorTok) + ', verbatim user messages ' + fmt(m.userQuotes) + ', recovery footer ' + RECOVERY_FOOTER_TOKENS + '. On the next compaction it is updated, not rebuilt.';
+  if (m.status === 'pruned') return 'Phase 1 (no LLM): a tool result over 200 chars outside the protected tail becomes this 12-token stub. The full text is still in state.db (session_search).';
+  if (m.status === 'dup') return 'Phase 1: identical to a more recent tool result, so it back-references instead of repeating.';
+  if (m.status === 'skill_pruned') return 'Skill bodies are pruned to a marker; the model is told to reload with skill_view before relying on it.';
+  if (m.status === 'demoted') return 'Lean tail: a tool result inside the tail but older than the newest 6 tool rounds and ≥ 1,500 chars is demoted to a recovery stub.';
+  var z = zoneOf(sim, idx);
+  if (z === 'head') return 'Survived verbatim in the protected head (system + first 3 non-system rows). That protection decays to 0 after the first compaction, so next time this row is fair game.';
+  if (z === 'tail') return 'Survived verbatim in the protected tail: the newest rows up to ' + fmt(budget) + ' tokens (2.5% of the window, clamped 10K–25K, never over 20%), whole tool rounds kept together, at least one user message.';
+  var base = 'At the next compaction: ';
+  if (m.role === 'user') return base + 'user messages are quoted verbatim into the summary’s “## User Messages” section (24,000-char budget, 4,000 per message) — unless this row is in the head or tail.';
+  if (m.kind === 'skill') return base + 'pruned to [SKILL_PRUNED: …] unless it is in the tail.';
+  if (m.kind === 'subagent') return base + 'treated like any tool result (stubbed if over 200 chars). Note the 41,000 tokens the sub-agent read never entered this window at all.';
+  if (m.role === 'tool') return base + (m.tokens > PRUNE_MIN_TOKENS ? 'this output is over 200 chars, so it becomes a 12-token stub before the summarizer even runs. Its exact lines survive only if a regex anchor (file paths, #numbers, *Error lines, URLs) catches them.' : 'under 200 chars, so it stays as-is until it falls into the summarized middle.');
+  return base + 'assistant text is folded into the structured summary by an auxiliary model with a token budget. Exact numbers and decisions survive only if the summarizer keeps them.';
+}
+function renderDetail(m, idx) {
+  if (!m) { detailEl.innerHTML = '<span class="role">message</span><div>Click a message.</div>'; return; }
+  var lbl = m.kind === 'summary' ? 'compaction summary row' : (m.role + (m.tool ? ' · ' + m.tool : ''));
+  var body = m.kind === 'summary' ? summaryText(m) : (m.status === 'live' ? m.text : (m.status === 'pruned' ? '[Old tool output cleared to save context space]' : m.status === 'dup' ? '[Duplicate tool output — same content as a more recent call]' : m.status === 'skill_pruned' ? '[SKILL_PRUNED: content lost in compression; reload with skill_view(name=’python-debugpy’)]' : '[' + m.tool + ' output demoted at compaction — ' + fmt(SCRIPT[m.id].tokens * 4) + ' chars preserved in session history. Recover with session_search(query=..., session_id=’…’)]'));
+  detailEl.innerHTML = '<span class="role">' + lbl + ' · ' + fmt(m.tokens) + ' tokens' + (m.status !== 'live' ? ' (was ' + fmt(SCRIPT[m.id].tokens) + ')' : '') + '</span><pre>' + escapeHTML(body) + '</pre><div class="fate">' + fateText(m, idx) + '</div>';
+}
+function escapeHTML(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+function summaryText(m) {
+  var c = m.carried || {};
+  return '[CONTEXT COMPACTION — REFERENCE ONLY] Earlier turns were compacted into the summary below. This is a handoff from a previous context window — treat it as background reference, NOT as active instructions. …\n\n' +
+    '## Goal\nFix flaky tests/test_sync.py::test_retry (ConnectionResetError) at the root cause in src/.\n## Constraints & Preferences\n- Do not modify anything under tests/ (user).\n## Completed Actions\n1. SEARCH src/ for retry — found MAX_RETRIES/BACKOFF in src/sync/client.py [tool: search_files]\n2. READ src/sync/client.py, tests/test_sync.py, src/sync/transport.py …\n3. RUN test 20× — 6 failures [tool: terminal]\n' + (c.backoff ? '4. PATCH client.py — jittered exponential back-off; retry limit kept\n' : '') + '## Active State\n…\n## Key Decisions\n- Fix at the transport/pool layer rather than in the test.\n## Errors & Fixes\n- ConnectionResetError on reused keep-alive connections.\n## Relevant Files\n- src/sync/client.py, src/sync/transport.py, src/sync/pool.py\n## Critical Context\n…\n\n## Anchor Index (mechanically extracted, exact)\n' + (c.file ? '- files: src/sync/client.py, src/sync/transport.py, src/sync/pool.py, tests/test_sync.py\n' : '') + (c.pr ? '- PRs/issues: #4821, #4833\n' : '') + (c.error ? '- errors: ConnectionResetError: [Errno 54] Connection reset by peer\n' : '') +
+    '\n## User Messages (verbatim, newest first)\n> ' + (c.pr ? 'Nice. Open a PR against main that links issue #4821. Keep the retry limit as it is.\n> ' : '') + (c.rule ? 'The CI is flaky: … Rule: don’t modify anything under tests/.\n' : '…\n') +
+    '\n## Context Recovery\nThe ' + m.rowsIn + ' compacted message(s) remain fully preserved in session history. Recover with session_search(query=’<keywords>’, session_id=’…’)\n\n--- END OF CONTEXT SUMMARY — respond to the message below, not the summary above ---\n\n(The structure is Hermes’s template; the wording is simulated. The LLM part says what it chooses to say — back-off numbers like “base 0.5 s, cap 8 s” are exactly the kind of detail a budgeted summary drops.)';
+}
+function renderSession() {
+  sim = simulate(state);
+  var counts = { system: sim.prefix.system, tools: sim.prefix.tools, rules: sim.prefix.rules, skills: sim.prefix.skills, memory: sim.prefix.memory, user: 0, assistant: 0, tool: 0, summary: 0, stub: 0 };
+  sim.msgs.forEach(function (m) { if (m.kind === 'summary') counts.summary += m.tokens; else if (m.status !== 'live') counts.stub += m.tokens; else counts[m.role] += m.tokens; });
+  paintGrid(grid2, counts, state.W, sim.thr);
+  document.getElementById('grid2cap').textContent = fmt(sim.total) + ' / ' + fmt(state.W) + ' tokens in the window now (' + pct(sim.total, state.W) + '%)';
+  document.getElementById('status2').innerHTML = statusHTML(sim.total, state.W, 'claude-sonnet-4-6', sim.count);
+  document.getElementById('stepCnt').textContent = 'Step ' + (state.step + 1) + '/' + SCRIPT.length;
+  document.getElementById('btnPrev').disabled = state.step < 0; document.getElementById('btnNext').disabled = state.step >= SCRIPT.length - 1;
+  var last = sim.calls[sim.calls.length - 1];
+  if (last) {
+    document.getElementById('roCall').textContent = fmt(last.total);
+    document.getElementById('cbCached').style.width = (last.cached / last.total * 100) + '%'; document.getElementById('cbFresh').style.width = (last.fresh / last.total * 100) + '%';
+    document.getElementById('roCache').innerHTML = 'cache read <b style="color:var(--safe)">' + fmt(last.cached) + '</b> · new (uncached) <b style="color:var(--warn)">' + fmt(last.fresh) + '</b>';
+  } else { document.getElementById('roCall').textContent = '—'; document.getElementById('cbCached').style.width = 0; document.getElementById('cbFresh').style.width = 0; document.getElementById('roCache').textContent = 'no model call yet'; }
+  document.getElementById('roSent').textContent = fmt(sim.sentTotal);
+  document.getElementById('roSentCache').innerHTML = sim.sentTotal ? Math.round(sim.sentCached / sim.sentTotal * 100) + '% of it came from the prompt cache (Hermes: 4 cache breakpoints, 5-minute TTL by default)' : '';
+  document.getElementById('roTrig').textContent = fmt(sim.thr) + ' (' + pct(sim.thr, state.W) + '%)';
+  document.getElementById('roCmp').textContent = sim.count; document.getElementById('roCmpBox').classList.toggle('hi', sim.count > 0);
+  var logEl = document.getElementById('eventlog'); logEl.innerHTML = '';
+  sim.events.forEach(function (e) { var d = document.createElement('div'); d.className = e.cmp ? 'cmp' : ''; d.textContent = 'step ' + (e.step + 1) + ' — ' + e.text; logEl.appendChild(d); });
+  if (!sim.events.length && sim.calls.length) { logEl.innerHTML = '<div>No compaction yet. Prompt ' + fmt(sim.total) + ' of ' + fmt(sim.thr) + ' trigger tokens (' + fmt(Math.max(0, sim.thr - sim.total)) + ' to go).</div>'; }
+  renderTranscript();
+  var sel = null, selIdx = -1; sim.msgs.forEach(function (m, i) { if (m.id === selectedId) { sel = m; selIdx = i; } });
+  renderDetail(sel, selIdx);
+  renderSection3(); renderBets();
+}
+function goTo(n) { cancelAuto(); state.step = Math.max(-1, Math.min(SCRIPT.length - 1, n)); if (selectedId !== null && (typeof selectedId === 'number') && selectedId > state.step) selectedId = null; renderSession(); }
+function cancelAuto() { if (autoTimer) { clearInterval(autoTimer); autoTimer = null; document.getElementById('btnAuto').textContent = 'Auto-play'; } }
+document.getElementById('btnNext').addEventListener('click', function () { goTo(state.step + 1); });
+document.getElementById('btnPrev').addEventListener('click', function () { goTo(state.step - 1); });
+document.getElementById('btnEnd').addEventListener('click', function () { goTo(SCRIPT.length - 1); });
+document.getElementById('btnReset').addEventListener('click', function () { state.forced = {}; selectedId = null; goTo(-1); });
+document.getElementById('btnAuto').addEventListener('click', function () {
+  if (autoTimer) { cancelAuto(); return; }
+  document.getElementById('btnAuto').textContent = 'Pause';
+  autoTimer = setInterval(function () { if (state.step >= SCRIPT.length - 1) { cancelAuto(); return; } state.step++; renderSession(); }, 900);
+});
+document.addEventListener('keydown', function (e) {
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.target.tagName === 'TEXTAREA') return;
+  if (e.key === 'ArrowRight') { e.preventDefault(); goTo(state.step + 1); }
+  else if (e.key === 'ArrowLeft') { e.preventDefault(); goTo(state.step - 1); }
+  else if (e.key === ' ') { e.preventDefault(); document.getElementById('btnAuto').click(); }
+});
+
+/* ---------- section 3 ---------- */
+document.getElementById('thrSel').addEventListener('input', function (e) { state.p = parseFloat(e.target.value); document.getElementById('thrVal').textContent = state.p.toFixed(2); renderAll(); });
+document.getElementById('btnCompact').addEventListener('click', function () {
+  // force a compaction before the next model call (/compress sets force=True)
+  var next = -1; for (var i = state.step + 1; i < SCRIPT.length; i++) if (SCRIPT[i].role === 'assistant') { next = i; break; }
+  if (next < 0) { if (state.step < 0) return; next = state.step; }
+  state.forced[next] = true; goTo(Math.max(state.step, next));
+});
+function renderSection3() {
+  var W = state.W, p = state.p, eff = effectivePercent(W, p), thr = thresholdTokens(W, p), tb = tailBudget(W), ms = maxSummaryTokens(W);
+  var note = W < SMALL_CTX_WINDOW_LIMIT ? (eff > p ? 'window < 512K → threshold raised to 0.75 (raise-only floor)' : 'window < 512K, but your threshold is already ≥ 0.75') : 'window ≥ 512K: your threshold applies as-is';
+  document.getElementById('thrNote').textContent = note;
+  var floorLine = Math.floor(W * eff) < MINIMUM_CONTEXT_LENGTH ? 'floor to MINIMUM_CONTEXT_LENGTH 64,000 → capped at 85% of the window = <b>' + fmt(thr) + '</b>' : 'above the 64,000 floor → <b>' + fmt(thr) + '</b>';
+  var f = '<div><span class="r">trigger</span>   = window × max(threshold, 0.75 if window &lt; 512K) = ' + fmt(W) + ' × ' + eff.toFixed(2) + ' = ' + fmt(Math.floor(W * eff)) + ' → ' + floorLine + ' tokens</div>' +
+    '<div>tail      = max(10,000, min(25,000, 2.5% × window)) capped at 20% × window = <b>' + fmt(tb) + '</b> tokens kept verbatim (and at least ' + Math.min(PROTECT_LAST_N, MAX_TAIL_MESSAGE_FLOOR) + ' rows)</div>' +
+    '<div>head      = system prompt + first <b>' + PROTECT_FIRST_N + '</b> rows on the first compaction, <b>0</b> after that</div>' +
+    '<div>summary   = max(2,000, min(20% × middle, min(5% × window, 10,000))) ≤ <b>' + fmt(ms) + '</b> tokens, plus anchor index, verbatim user messages, recovery footer</div>' +
+    '<div>prune     = tool results &gt; 200 chars outside the tail → “[Old tool output cleared to save context space]”, before any LLM runs</div>';
+  document.getElementById('formula').innerHTML = f;
+  var c = sim && sim.compactions.length ? sim.compactions[sim.compactions.length - 1] : null;
+  var ph = document.getElementById('phases');
+  if (!c) {
+    ph.innerHTML = '<div class="phase"><h4>Phase 1 · prune</h4><div class="s">Old tool outputs → stubs. No LLM call.</div></div><div class="phase"><h4>Phase 2 · boundaries</h4><div class="s">Head (3 rows, first time) · middle · token-budgeted tail.</div></div><div class="phase"><h4>Phase 3 · summarize</h4><div class="s">One auxiliary-model call over the middle, structured template.</div></div><div class="phase"><h4>Phase 4 · assemble</h4><div class="s">head + summary row + tail; system prompt rebuilt with a compaction note; memory reloaded from disk.</div></div>';
+    document.getElementById('sumbox').innerHTML = '<span class="d">No compaction has happened at this step' + (sim && sim.calls.length ? ' (' + fmt(sim.total) + ' of ' + fmt(thr) + ' trigger tokens). Keep stepping, lower the window in part 1, or press Compact now.' : '.') + '</span>';
+    return;
+  }
+  ph.innerHTML = '<div class="phase"><h4>Phase 1 · prune (no LLM)</h4><div class="v">' + c.pruned + '</div><div class="s">tool outputs → 12-token stubs' + (c.dedup ? ', ' + c.dedup + ' duplicate' : '') + (c.skills ? ', ' + c.skills + ' skill → [SKILL_PRUNED]' : '') + (c.demoted ? ', ' + c.demoted + ' tail outputs demoted' : '') + '</div></div>' +
+    '<div class="phase"><h4>Phase 2 · boundaries</h4><div class="v">' + c.head + ' / ' + c.middleRows + ' / ' + c.tailRows + '</div><div class="s">head / middle / tail rows; tail budget ' + fmt(c.tailBudget) + ' tokens</div></div>' +
+    '<div class="phase"><h4>Phase 3 · summarize</h4><div class="v">' + fmt(c.content) + ' → ' + fmt(c.sumTok) + '</div><div class="s">middle tokens → summary row (LLM budget ' + fmt(c.llm) + ' + appendices)</div></div>' +
+    '<div class="phase"><h4>Phase 4 · assemble</h4><div class="v">' + fmt(c.before) + ' → ' + fmt(c.after) + '</div><div class="s">history tokens at step ' + (c.step + 1) + (c.forced ? ' (manual /compress)' : ' (auto, prompt ' + fmt(c.prompt) + ' ≥ ' + fmt(c.trigger) + ')') + '; freed ' + fmt(c.before - c.after) + '</div></div>';
+  var srow = null; sim.msgs.forEach(function (m) { if (m.kind === 'summary') srow = m; });
+  document.getElementById('sumbox').innerHTML = '<span class="h">The summary row now in the window (' + fmt(srow.tokens) + ' tokens) — structure is Hermes’s, wording simulated:</span>\n\n' + escapeHTML(summaryText(srow));
+}
+
+/* ---------- section 4: bets ---------- */
+var guesses = {}, revealed = false;
+function factFate(id) {
+  // returns {cls:'keep'|'maybe'|'gone', verdict, why, src}
+  var msgs = sim.msgs, cmp = sim.compactions.length;
+  function liveMsgWith(f) { for (var i = 0; i < msgs.length; i++) if (msgs[i].status === 'live' && msgs[i].kind !== 'summary' && msgs[i].facts.indexOf(f) >= 0) return i; return -1; }
+  function summaryCarries(f) { for (var i = 0; i < msgs.length; i++) if (msgs[i].kind === 'summary' && msgs[i].carried && msgs[i].carried[f]) return true; return false; }
+  var live = liveMsgWith(id), z = live >= 0 ? zoneOf(sim, live) : '';
+  var S = 'context_compressor.py';
+  if (id === 'mem') {
+    var written = sim.memExtra > 0;
+    if (!written) return { cls: 'gone', verdict: 'Not saved yet', why: 'The memory write happens at step 15.', src: '' };
+    return cmp ? { cls: 'keep', verdict: 'Yes — and only now', why: 'The entry was on disk since step 15, but the system prompt is rendered once at session start. Compaction invalidates the prompt and reloads memory from disk, so the rebuilt prompt finally carries it (' + fmt(Math.ceil(sim.prefix.memChars / 4)) + '-token memory block now).', src: 'system_prompt.py invalidate_system_prompt L808-826; docs: Persistent Memory' }
+               : { cls: 'maybe', verdict: 'On disk, not in the prompt', why: 'Saved to USER.md immediately, but the frozen system-prompt snapshot does not change mid-session. It appears after a compaction rebuild or in the next session.', src: 'memory_tool_store.py L618-621; docs: Persistent Memory' };
+  }
+  if (live >= 0 && (z === 'head' || z === 'tail' || !cmp)) return { cls: 'keep', verdict: 'Yes, verbatim', why: !cmp ? 'No compaction has happened, so every message is still in the window as sent.' : z === 'head' ? 'Its message is in the protected head (first ' + PROTECT_FIRST_N + ' rows). Only on the first compaction: after that, head protection decays to 0.' : 'Its message is in the protected tail (' + fmt(tailBudget(state.W)) + '-token budget).', src: S + ' L4647-4666 (head decay), L2234-2245 (tail budget)' };
+  if (id === 'rule') return { cls: 'keep', verdict: 'Yes, quoted verbatim', why: 'Lean summaries append “## User Messages (verbatim, newest first)” mechanically, 24,000-char budget, 4,000 per message. The summarizer is also told to keep constraints — but a bug report (#136540) found LLM-rewritten summaries dropping these sections on a second pass. Verbatim by design, not guaranteed in practice.', src: S + ' L932-935; GitHub issue #136540' };
+  if (id === 'file') return { cls: 'keep', verdict: 'Yes, exactly', why: 'Paths matching the files regex are regex-harvested into “## Anchor Index (mechanically extracted, exact)”: no LLM involved, capped at 80 paths / 7,000 chars.', src: S + ' L1029-1040 (_ANCHOR_PATTERNS)' };
+  if (id === 'pr') return { cls: 'keep', verdict: 'Yes, exactly', why: '#4821 and #4833 match the PRs/issues pattern #\\d{3,6} and land in the anchor index (cap 120). The user sentence is also quoted verbatim.', src: S + ' L1031' };
+  if (id === 'error') return { cls: 'maybe', verdict: 'The error name, not the log', why: 'The 12,500-token log was stubbed to “[Old tool output cleared to save context space]” in Phase 1. But the errors regex ([A-Z]\\w*Error plus up to 90 chars) harvests “ConnectionResetError: [Errno 54] Connection reset by peer” into the anchor index. The rest of the log is recoverable only via session_search.', src: S + ' L831 (placeholder), L1035 (errors pattern)' };
+  if (id === 'backoff') return { cls: 'maybe', verdict: 'Only if the summarizer kept it', why: 'Assistant text has no mechanical appendix. It survives only through the auxiliary model’s structured summary, whose budget here was ' + fmt(sim.compactions[cmp - 1].llm) + ' tokens for ' + fmt(sim.compactions[cmp - 1].content) + ' tokens of middle. Exact values are the first casualty: the Governance Decay benchmark measured prohibited-action rates going from 0% with the policy in context to 30% after compaction.', src: S + ' L4109-4166 (template); arXiv:2606.22528' };
+  if (id === 'skill') return { cls: 'gone', verdict: 'No — marker only', why: 'Skill bodies outside the tail are replaced by “[SKILL_PRUNED: content lost in compression; reload with skill_view(name=’python-debugpy’)]”. The agent must reload it before relying on it (it is told so in the system prompt).', src: S + ' L851-866' };
+  return { cls: 'gone', verdict: 'No', why: '', src: '' };
+}
+function renderBets() {
+  var box = document.getElementById('bets'), st = document.getElementById('betsState');
+  var cmp = sim ? sim.compactions.length : 0;
+  st.innerHTML = cmp ? '<b style="color:var(--c-summary)">' + cmp + ' compaction' + (cmp > 1 ? 's' : '') + ' so far at step ' + (state.step + 1) + '.</b>' : '<b>No compaction yet</b> — step further in part 2, pick a smaller window in part 1, or press Compact now in part 3; revealing now just says “still there”.';
+  box.innerHTML = '';
+  FACTS.forEach(function (f) {
+    var d = document.createElement('div'); d.className = 'bet' + (revealed ? ' revealed' : '');
+    var g = guesses[f.id];
+    var fate = revealed ? factFate(f.id) : null;
+    var right = fate && g ? ((g === 'yes' && fate.cls === 'keep') || (g === 'no' && fate.cls === 'gone') ? ' <span class="right">✓ you were right</span>' : fate.cls === 'maybe' ? ' <span class="right">≈ partly</span>' : ' <span class="right">✗</span>') : '';
+    d.innerHTML = '<div class="q"><b>' + f.q + '</b><small>' + f.where + '</small></div><div class="ans"><button class="btn small' + (g === 'yes' ? ' pick' : '') + '" data-g="yes">still has it</button><button class="btn small' + (g === 'no' ? ' pick' : '') + '" data-g="no">lost it</button></div>' +
+      (fate ? '<div class="res ' + fate.cls + '"><b>' + fate.verdict + '</b>' + right + ' — ' + fate.why + (fate.src ? '<span class="src">' + fate.src + '</span>' : '') + '</div>' : '');
+    d.querySelectorAll('button[data-g]').forEach(function (b) { b.addEventListener('click', function () { guesses[f.id] = b.getAttribute('data-g'); renderBets(); }); });
+    box.appendChild(d);
+  });
+}
+document.getElementById('btnReveal').addEventListener('click', function () { revealed = true; renderBets(); });
+document.getElementById('btnBetsReset').addEventListener('click', function () { guesses = {}; revealed = false; renderBets(); });
+
+/* ---------- boot (optional deep link: ?window=128000&threshold=0.5&step=19) ---------- */
+function renderAll() { renderSection1(); renderSession(); }
+(function () {
+  try {
+    var q = new URLSearchParams(location.search);
+    var w = parseInt(q.get('window'), 10);
+    if ([64000, 128000, 200000, 1000000].indexOf(w) >= 0) { state.W = w; document.getElementById('winSel').value = String(w); }
+    var p = parseFloat(q.get('threshold'));
+    if (p >= 0.3 && p <= 0.9) { state.p = Math.round(p * 20) / 20; document.getElementById('thrSel').value = String(state.p); document.getElementById('thrVal').textContent = state.p.toFixed(2); }
+    var s = parseInt(q.get('step'), 10);
+    if (s >= 0 && s <= SCRIPT.length) state.step = s - 1;
+  } catch (e) {}
+})();
+renderAll();
+</script>
+</body>
+</html>
