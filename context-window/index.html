@@ -275,7 +275,7 @@ var PREFIX_ROWS = [
   { id: 'profile', tier: 'volatile', cat: 'system', label: 'Active profile line', tokens: 81, path: 'system_prompt.py _active_profile_line', desc: '“Active Hermes profile: default…”. A profile is a separate Hermes home (config, SOUL.md, memories, skills, cron, sessions). It decides which files load above; it adds only this line.', fate: 'Never compacted.' },
   { id: 'date', tier: 'volatile', cat: 'system', label: 'Date line + Model / Provider / Platform', tokens: 36, path: 'system_prompt.py _timestamp_line', desc: 'Date and timezone, then Model, Provider, Platform. Date only, so the bytes stay cacheable all day.', fate: 'A rebuild after midnight adds an “as of” line.' },
   { id: 'runtime', tier: 'volatile', cat: 'system', label: 'Runtime environment', tokens: 89, path: 'prompt_builder.py build_environment_hints', desc: 'Host OS, home, working and scratch directory. With the Docker backend this describes the container.', fate: 'Never compacted.' },
-  { id: 'note', tier: 'volatile', cat: 'system', label: 'Compaction note', tokens: 93, path: 'context_compressor.py _COMPRESSION_NOTE', onlyCompacted: true, desc: 'Added after the first compaction: earlier context was summarized; recover details with session_search.', fate: 'Stays for the session.' },
+  { id: 'note', tier: 'volatile', cat: 'system', label: 'Compaction note', tokens: 93, path: 'context_compressor.py _COMPRESSION_NOTE', onlyCompacted: true, desc: 'Added after the first compaction: tells the model that earlier context was summarized and where to look for details.', fate: 'Stays for the session.' },
   // tool schemas: the `tools` parameter of every request (toolsets.py _HERMES_CORE_TOOLS; measured from the registry)
   { id: 'ts_web', tier: 'tools', cat: 'tools', label: 'web: web_search, web_extract', tokens: 426, path: 'tools/web_tools.py', desc: 'Two web tools. web_extract returns at most 100,000 chars per call.', fate: 'Never compacted.' },
   { id: 'ts_terminal', tier: 'tools', cat: 'tools', label: 'terminal: terminal, process_manage', tokens: 1012, path: 'tools/terminal_tool.py', desc: 'Shell on the host or in Docker. Output capped at 50,000 chars per call.', fate: 'Never compacted.' },
@@ -634,7 +634,7 @@ function renderTimeline(segs) {
   var last = ui.sim.compactions[ui.sim.compactions.length - 1];
   if (last) {
     var b = document.createElement('div'); b.className = 'banner';
-    b.innerHTML = '<b>' + (last.forced ? '/compress' : 'Auto-compaction #' + ui.sim.count) + '</b> ' + (last.forced ? '' : 'before step ' + (last.step + 1) + ' ') + '· history ' + fmtK(last.before) + ' → ' + fmtK(last.after) + ' tokens · ' + last.middleRows + ' rows folded into one summary, ' + last.pruned + ' tool outputs stubbed' + (last.skills ? ', ' + last.skills + ' skill pruned' : '') + (last.demoted ? ', ' + last.demoted + ' demoted in the tail' : '') + '. System prompt rebuilt, memory re-read from disk.';
+    b.innerHTML = '<b>' + (last.forced ? '/compress' : 'Auto-compaction #' + ui.sim.count) + '</b> · conversation ' + fmtK(last.before) + ' → ' + fmtK(last.after) + ' tokens. The middle (' + last.middleRows + ' rows) became one summary, ' + (last.pruned + last.demoted) + ' old tool outputs were cleared, the newest messages stay. System prompt rebuilt, memory re-read from disk.';
     tlEl.appendChild(b);
   }
   var prevKind = null;
@@ -647,8 +647,8 @@ function renderTimeline(segs) {
     var m = s.msg, kind = m.kind === 'summary' ? 'summary' : m.role;
     if (kind === 'user' && prevKind !== 'user') tlEl.appendChild(phase('You'));
     else if (kind === 'assistant' && prevKind === 'user') tlEl.appendChild(phase('Hermes works'));
-    else if (kind === 'summary') tlEl.appendChild(phase('Summarized by compaction'));
-    else if (prevKind === 'summary') tlEl.appendChild(phase('Kept verbatim (protected tail)'));
+    else if (kind === 'summary') tlEl.appendChild(phase('The middle, summarized'));
+    else if (prevKind === 'summary') tlEl.appendChild(phase('Recent messages, kept'));
     var label = m.kind === 'summary' ? '[CONTEXT COMPACTION — REFERENCE ONLY]' : m.title;
     var badge = m.kind === 'summary' ? 'summary' : m.role === 'user' ? 'you' : m.role === 'assistant' ? 'hermes' : (m.status === 'live' ? 'tool' : 'stub');
     tlEl.appendChild(evRow(s, label, badge, m.status === 'live' ? '' : ' stub'));
@@ -672,21 +672,16 @@ function esc(s) { return s.replace(/&/g, '&amp;').replace(/</g, '&lt;'); }
 /* ---------- detail pane ---------- */
 var detailEl = document.getElementById('detail');
 function fateText(m) {
-  var W = state.W, budget = tailBudget(W);
-  if (m.kind === 'summary') return 'Written by one auxiliary-model call: a structured summary (' + fmt(m.llm) + '-token budget) plus mechanical appendices: regex anchors (paths, #numbers, *Error lines, URLs), your messages verbatim, a session_search pointer. Replaces ' + m.rowsIn + ' rows (' + fmtK(m.contentTokens) + ' tokens).';
-  if (m.status === 'pruned') return 'Over 200 chars and outside the tail → “[Old tool output cleared to save context space]”. The full text stays in the session database.';
-  if (m.status === 'dup') return 'Same as a more recent result → “[Duplicate tool output — same content as a more recent call]”.';
-  if (m.status === 'skill_pruned') return 'Skill body → “[SKILL_PRUNED: … reload with skill_view]”.';
-  if (m.status === 'demoted') return 'In the tail but older than the newest 6 tool rounds and over 1,500 chars → recovery stub.';
+  if (m.kind === 'summary') return 'One summary of the middle of the conversation, written by a model: the task, decisions, file names and links, and your own messages quoted. It replaced ' + m.rowsIn + ' rows (' + fmtK(m.contentTokens) + ' tokens).';
+  if (m.status === 'pruned' || m.status === 'demoted') return 'Old tool output: cleared to a short note. The full text is still on disk in the session history.';
+  if (m.status === 'dup') return 'Same as a more recent result: replaced by a pointer to it.';
+  if (m.status === 'skill_pruned') return 'Skill text removed; Hermes reloads it if needed.';
   var z = zoneOf(m);
-  if (z === 'head') return 'Protected head: the first 3 rows survive the first compaction verbatim, not the next.';
-  if (z === 'tail-floor') return 'Protected tail, for now: Hermes keeps at least the newest 8 rows, even past the ' + fmtK(budget) + ' tail budget. As the session grows this row becomes a stub.';
-  if (z === 'tail') return 'Protected tail: the newest rows up to ' + fmtK(budget) + ' tokens (2.5% of the window, 10K–25K) survive verbatim, whole tool rounds together.';
-  if (m.role === 'user') return 'Quoted verbatim into the summary (up to 4,000 chars).';
-  if (m.kind === 'skill') return 'Cut to a [SKILL_PRUNED] marker unless in the tail.';
-  if (m.kind === 'subagent') return 'Treated like any tool result. What the subagent read never entered this window.';
-  if (m.role === 'tool') return m.tokens > PRUNE_MIN_TOKENS ? 'Over 200 chars: becomes a 12-token stub before the summarizer runs. Lines survive only through regex anchors.' : 'Under 200 chars: stays until it falls into the summarized middle.';
-  return 'Folded into the summary by an auxiliary model; details survive only if it keeps them.';
+  if (z === 'head') return 'Beginning of the conversation: kept as is the first time, summarized the next.';
+  if (z === 'tail' || z === 'tail-floor') return 'Recent message: kept as is. Hermes always keeps the newest messages (about ' + fmtK(tailBudget(state.W)) + ' tokens, at least 8 rows) untouched.';
+  if (m.role === 'user') return 'Your messages are quoted in the summary, word for word.';
+  if (m.role === 'tool') return m.tokens > PRUNE_MIN_TOKENS ? 'Large tool output: cleared to a short note; the summary keeps only names and numbers from it.' : 'Small tool output: summarized with the rest.';
+  return 'Summarized with the rest of the middle.';
 }
 function zoneOf(m) {
   var msgs = ui.sim.msgs, idx = msgs.indexOf(m), headN = ui.sim.count === 0 ? PROTECT_FIRST_N : 0;
@@ -704,11 +699,11 @@ function takeaway() {
   var step = tickToStep(ui.tick), W = state.W;
   if (ui.tick < 0) return 'Nothing in the window yet. Press Start.';
   var lastC = ui.sim.compactions[ui.sim.compactions.length - 1];
-  if (ui.sim.tripped) return 'A round of five reads is bigger than this window and the protected tail keeps whole rounds, so two compactions in a row stayed over the trigger. Hermes’s anti-thrash breaker switched auto-compaction off; every call now overflows.';
-  if (lastC && lastC.forced && ui.tick === lastCompactTick()) return 'You ran /compress: the same four phases auto-compaction runs, on demand. Old tool outputs → stubs, the middle → one summary row, newest rows kept, prompt rebuilt with USER.md re-read. The day goes on from here.';
-  if (ui.sim.skipped && ui.sim.total > W) return 'Over the window and nothing to cut: the protected head and tail cover every row. A real provider would reject this call.';
+  if (ui.sim.tripped) return 'Even after compacting, the newest round of reads does not fit in this window. Hermes stops trying, and every call now overflows. A 64K window cannot do this job.';
+  if (lastC && lastC.forced && ui.tick === lastCompactTick()) return 'You ran /compress, which does exactly what auto-compaction does: the beginning stays, the middle becomes one summary, old tool outputs are cleared, the newest messages stay. The prompt is rebuilt, so USER.md now includes what the agent saved. The day goes on from here.';
+  if (ui.sim.skipped && ui.sim.total > W) return 'Over the window and nothing to summarize yet: everything is either the beginning or the newest messages. A real provider would reject this call.';
   if (step >= 0 && ui.sim.total >= ui.sim.thr && !(ui.sim.count && ui.tick === lastCompactTick())) return 'Past the trigger' + (ui.sim.total > W ? ', even past the window' : '') + '. Results are appended as they land; Hermes compacts before the next model call. Press Next.';
-  if (ui.sim.count && ui.tick === lastCompactTick()) return 'Fired at ' + fmtK(ui.sim.thr) + ' (' + Math.round(ui.sim.thr / W * 100) + '% of ' + fmtK(W) + '), not at 100%. Old tool outputs → stubs, the middle → one summary row, newest rows kept verbatim, prompt rebuilt with USER.md re-read.';
+  if (ui.sim.count && ui.tick === lastCompactTick()) return 'Fired at ' + fmtK(ui.sim.thr) + ' (' + Math.round(ui.sim.thr / W * 100) + '% of ' + fmtK(W) + '), not at 100%. The beginning stays, the middle becomes one summary, old tool outputs are cleared, the newest messages stay. The prompt is rebuilt, so USER.md now includes what the agent saved.';
   if (step < 0) {
     var r = BOOT_ROWS[ui.tick];
     if (r.tier === 'stable') return 'The prompt is built once per session in three parts: stable, context, volatile. Stable first: SOUL.md, then guidance. Two blocks exist only for DeepSeek-class models.';
@@ -738,7 +733,7 @@ function renderDetail(segs) {
     var m = seg.msg, who = m.kind === 'summary' ? 'compaction summary' : m.role === 'user' ? 'you' : m.role === 'assistant' ? 'Hermes' + (m.tool ? ' · ' + m.tool : '') : 'tool result · ' + m.tool;
     html += '<div class="h"><i class="sw" style="--sw:' + CATS[seg.cat].sw + '"></i>' + esc(m.kind === 'summary' ? 'Compaction summary' : m.title) + '</div><div class="meta">' + fmt(seg.tokens) + ' tokens · ' + who + '</div>';
     var body = m.kind === 'summary' ? SUMMARY_PREVIEW : m.status === 'live' ? m.text : m.status === 'pruned' ? '[Old tool output cleared to save context space]' : m.status === 'dup' ? '[Duplicate tool output — same content as a more recent call]' : m.status === 'skill_pruned' ? '[SKILL_PRUNED: content lost in compression; reload with skill_view(name=\'python-debugpy\')]' : '[' + m.tool + ' output demoted at compaction — ' + fmt(SCRIPT[m.id].tokens * 4) + ' chars preserved in session history. Recover with session_search]';
-    html += '<pre>' + esc(body) + '</pre><div class="box"><div class="k">' + (m.status === 'live' && m.kind !== 'summary' ? 'At compaction' : 'What compaction did') + '</div>' + fateText(m) + '</div>';
+    html += '<pre>' + esc(body) + '</pre><div class="box"><div class="k">' + (m.status === 'live' && m.kind !== 'summary' ? 'When the window is compacted' : 'What compaction did') + '</div>' + fateText(m) + '</div>';
   } else {
     html += '<div class="hint">Hover a row to see what it is and where it sits in the window.<br>Click to pin.</div>';
   }
