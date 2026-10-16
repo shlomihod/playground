@@ -149,6 +149,8 @@
   .controls { display: flex; gap: 8px; align-items: center; margin-top: 14px; flex-wrap: wrap; }
   .controls .prog { flex: 1; min-width: 120px; height: 4px; border-radius: 2px; background: var(--c-free); overflow: hidden; }
   .controls .prog i { display: block; height: 100%; background: var(--accent); transition: width .25s; }
+  #btnPlay { min-width: 96px; }
+  #btnNext { min-width: 72px; }
   .controls .cnt { font-family: var(--font-mono); font-size: .74rem; color: var(--text-dim); font-variant-numeric: tabular-nums; min-width: 64px; text-align: right; }
   .kbd { font-family: var(--font-mono); font-size: .7rem; border: 1px solid var(--border-strong); border-bottom-width: 2px; border-radius: 5px; padding: 0 5px; color: var(--text-dim); }
 
@@ -200,7 +202,7 @@
   </div>
 
   <div class="controls">
-    <button class="btn primary" id="btnPlay">&#9654; Start session</button>
+    <button class="btn primary" id="btnPlay">&#9654; Play</button>
     <button class="btn" id="btnNext">Next &rsaquo;</button>
     <button class="btn" id="btnReset">&#8634; Restart</button>
     <div class="prog"><i id="prog" style="width:0"></i></div>
@@ -750,7 +752,7 @@ function render() {
   statusEl.innerHTML = statusHTML(used, W, ui.sim.count);
   paintGrid(segs); renderTimeline(segs); renderDetail(segs);
   var g = pendingGate();
-  btnPlay.innerHTML = ui.tick < 0 ? '&#9654; Start session' : atEnd() ? '&#8634; Replay' : g ? (g.kind === 'compress' ? 'Run /compress' : 'Send prompt &#8629;') : ui.playing ? '&#10074;&#10074; Pause' : '&#9654; Play';
+  btnPlay.innerHTML = ui.playing ? '&#10074;&#10074; Pause' : '&#9654; Play';
   btnNext.disabled = atEnd();
   progEl.style.width = Math.max(0, (ui.tick + 1) / TOTAL_TICKS * 100) + '%';
   cntEl.textContent = ui.tick < 0 ? '' : (Math.min(ui.tick + 1, TOTAL_TICKS) + ' / ' + TOTAL_TICKS);
