@@ -315,7 +315,7 @@ var SCRIPT = [
   { role: 'assistant', title: 'memory(add → USER.md)', tokens: 80, tool: 'memory', text: 'tool_call: memory(action="add", target="user", content="Researcher working on differential privacy in practice. Prefers short bullet answers.")' },
   { role: 'tool', title: 'memory → saved (USER.md 514/1,375 chars)', tokens: 30, tool: 'memory', kind: 'memory', memChars: 150, text: 'Write saved. USER.md at 514/1,375 chars. This update is complete — do not repeat it.\n\n[On disk now. NOT in the system prompt: USER.md was rendered once at session start.]' },
   { role: 'assistant', title: 'Noted. What do you need?', tokens: 30, text: '• Noted: DP in practice, short bullets.\n• What do you need?' },
-  { role: 'user', title: 'What’s new on DP this week? Search the web.', tokens: 30, text: 'What’s new on differential privacy this week? Search the web.' },
+  { role: 'user', title: 'What’s new on differential privacy this week? Search the web.', tokens: 30, text: 'What’s new on differential privacy this week? Search the web.' },
   { role: 'assistant', title: 'web_search', tokens: 50, tool: 'web_search', text: 'tool_call: web_search(query="differential privacy news this week", max_results=10)' },
   { role: 'tool', title: 'web_search → 10 results', tokens: 1800, tool: 'web_search', text: '1. NIST SP 800-226 final: Guidelines for Evaluating Differential Privacy Guarantees …\n2. Google: DP in Gemini training data pipelines …\n3. arXiv: 14 new cs.CR papers mentioning differential privacy …\n… (10 results, title + snippet + URL)' },
   { role: 'assistant', title: 'web_extract (2 pages)', tokens: 60, tool: 'web_extract', text: 'tool_call: web_extract(urls=["https://csrc.nist.gov/pubs/sp/800/226/final", "https://arxiv.org/list/cs.CR/new"])' },
@@ -734,7 +734,7 @@ function renderDetail(segs) {
   html += '<div class="box take"><div class="k">Key point</div>' + takeaway() + '</div>';
   detailEl.innerHTML = html;
 }
-var SUMMARY_PREVIEW = '[CONTEXT COMPACTION — REFERENCE ONLY]\nThe following is an automated summary of earlier conversation that was compressed to save context space. Treat it as background reference only.\n\n## Task\nPersonal-assistant day: DP news this week; summarizing the 60 PDFs in ~/research/reading, 3 bullets each, to ~/research/summaries.md (in progress) …\n## Key Decisions\n…\n## Anchor Index (mechanically extracted, exact)\n~/research/reading/p01.txt … p25.txt · https://csrc.nist.gov/pubs/sp/800/226/final …\n## User Messages (verbatim, newest first)\n…\n## Context Recovery\nFull transcript remains searchable via session_search(…)\n--- END OF CONTEXT SUMMARY ---';
+var SUMMARY_PREVIEW = '[CONTEXT COMPACTION — REFERENCE ONLY]\nThe following is an automated summary of earlier conversation that was compressed to save context space. Treat it as background reference only.\n\n## Task\nPersonal-assistant day: differential privacy news this week; summarizing the 60 PDFs in ~/research/reading, 3 bullets each, to ~/research/summaries.md (in progress) …\n## Key Decisions\n…\n## Anchor Index (mechanically extracted, exact)\n~/research/reading/p01.txt … p25.txt · https://csrc.nist.gov/pubs/sp/800/226/final …\n## User Messages (verbatim, newest first)\n…\n## Context Recovery\nFull transcript remains searchable via session_search(…)\n--- END OF CONTEXT SUMMARY ---';
 
 /* ---------- readout + controls ---------- */
 var roBig = document.getElementById('roBig'), roSub = document.getElementById('roSub'), statusEl = document.getElementById('status');
