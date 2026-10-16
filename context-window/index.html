@@ -172,7 +172,7 @@
 <body>
 <button id="theme-toggle" class="theme-toggle" aria-label="Toggle color theme"></button>
 <h1>Context Window</h1>
-<p class="subtitle">Everything an agent &ldquo;knows&rdquo; right now has to fit in one request. Watch <b>Hermes Agent</b>&rsquo;s window fill up before you type, grow with every request of your day, and get compacted. Setup: <code>hermes</code> in your home directory with a short <code>AGENTS.md</code>, model <code>kit.deepseek-v4-flash</code>, profile <code>default</code>.</p>
+<p class="subtitle">Everything an agent &ldquo;knows&rdquo; right now has to fit in one request. Watch <b>Hermes Agent</b>&rsquo;s window fill up before you type, grow with every request of your day, and get compacted. Setup: <code>hermes</code> in your home directory with a short <code>AGENTS.md</code>, model <code>deepseek-v4-flash</code>.</p>
 
 <div class="card">
   <div class="top">
@@ -210,12 +210,11 @@
 </div>
 
 <details class="src">
-  <summary>What is real here, and sources</summary>
+  <summary>Sources</summary>
   <ul>
-    <li><b>Real:</b> the order and content of the system prompt (its stable, context and volatile parts: SOUL.md first, memory and the profile line last) and the size of each part, measured from the <a href="https://github.com/NousResearch/hermes-agent" target="_blank" rel="noopener">hermes-agent</a> source at commit <code>7520c4e8</code> (2026-10-15): identity and guidance text, the two DeepSeek-gated blocks, the index of 58 bundled skills, 37 of the 51 core tool schemas; the compaction rules (threshold 50% floored to 75% under 512K, 64K minimum, protected head and tail, tool-output stubs, skill pruning, summary budget, memory re-read when the system prompt is rebuilt); the grid idea, status bar and colour bands of Hermes&rsquo;s own <code>/context</code> and CLI (Hermes draws 100 cells, one per percent; this page draws 500 so the small parts show); the model: Hermes&rsquo;s model table gives <code>deepseek-v4-flash</code> a 1,000,000-token window (the KIT endpoint may report a smaller one; pick what your status bar shows), and the smaller windows stand for the <code>model.context_length</code> config cap. Tokens are Hermes&rsquo;s own estimate: 4 characters &asymp; 1 token. The tools in the session are Hermes&rsquo;s registered tools.</li>
-    <li><b>Sample:</b> the AGENTS.md, MEMORY.md and USER.md contents and the runtime-environment lines.</li>
-    <li><b>Scripted:</b> the day itself. Its messages and token counts are illustrative, in the spirit of Anthropic&rsquo;s <a href="https://code.claude.com/docs/en/context-window" target="_blank" rel="noopener">Explore the context window</a> simulation for Claude Code, which inspired this page.</li>
-    <li>Hermes docs: <a href="https://hermes-agent.nousresearch.com/docs/developer-guide/context-compression-and-caching" target="_blank" rel="noopener">Context Compression and Caching</a>, <a href="https://hermes-agent.nousresearch.com/docs/developer-guide/prompt-assembly" target="_blank" rel="noopener">Prompt Assembly</a>, <a href="https://hermes-agent.nousresearch.com/docs/user-guide/features/memory" target="_blank" rel="noopener">Persistent Memory</a>. Source file and line references are in this demo&rsquo;s README.</li>
+    <li><a href="https://github.com/NousResearch/hermes-agent" target="_blank" rel="noopener">hermes-agent</a> source at commit <code>7520c4e8</code> (2026-10-15): prompt assembly, tool schemas, compaction rules, status bar. Prefix sizes are measured there (4 chars &asymp; 1 token, Hermes&rsquo;s own estimate); the day itself is scripted. File and line references in this demo&rsquo;s README.</li>
+    <li>Hermes docs: <a href="https://hermes-agent.nousresearch.com/docs/developer-guide/prompt-assembly" target="_blank" rel="noopener">Prompt Assembly</a>, <a href="https://hermes-agent.nousresearch.com/docs/developer-guide/context-compression-and-caching" target="_blank" rel="noopener">Context Compression and Caching</a>, <a href="https://hermes-agent.nousresearch.com/docs/user-guide/features/memory" target="_blank" rel="noopener">Persistent Memory</a>.</li>
+    <li>Shape after Anthropic&rsquo;s <a href="https://code.claude.com/docs/en/context-window" target="_blank" rel="noopener">Explore the context window</a> for Claude Code.</li>
   </ul>
 </details>
 
@@ -251,65 +250,40 @@
 /* ---- What sits in the window before you type: Hermes's system prompt in its three tiers (stable, context, volatile)
    (agent/system_prompt.py build_system_prompt_parts), then the tool schemas (a separate `tools`
    parameter, not prompt text). Scenario: `hermes` started in $HOME on a workshop VM, model
-   kit.deepseek-v4-flash, profile "default", a short ~/AGENTS.md. Home is not a code workspace
+   deepseek-v4-flash, profile "default", a short ~/AGENTS.md. Home is not a code workspace
    (an AGENTS.md there is "global config", coding_context.py _marker_root), so Hermes's general
    posture applies: no coding brief, no workspace snapshot (_detect_profile). ---- */
 var PREFIX_ROWS = [
-  // stable tier
-  { id: 'soul', tier: 'stable', cat: 'system', label: 'SOUL.md (identity)', tokens: 167, path: '~/.hermes/SOUL.md',
-    desc: 'Who the agent is. The first thing in the system prompt. Hermes seeds this file on first run with its default persona (667 chars: “You are Hermes Agent, built by Nous Research. Be direct…”); edit it and the personality changes. Each profile has its own.',
-    fate: 'Part of the system prompt: never compacted, re-read from disk when the prompt is rebuilt after a compaction.' },
-  { id: 'help', tier: 'stable', cat: 'system', label: 'Hermes help pointer', tokens: 150, path: 'prompt_builder.py HERMES_AGENT_HELP_GUIDANCE',
-    desc: 'Tells the model to answer questions about Hermes itself from the hermes-agent skill rather than guess.', fate: 'Never compacted.' },
-  { id: 'guid', tier: 'stable', cat: 'system', label: 'Task-completion + parallel-tool guidance', tokens: 348, path: 'prompt_builder.py TASK_COMPLETION_GUIDANCE, PARALLEL_TOOL_CALL_GUIDANCE',
-    desc: 'Universal guidance for every model: finish the job, never fabricate when blocked, issue independent tool calls in parallel.', fate: 'Never compacted.' },
-  { id: 'toolg', tier: 'stable', cat: 'system', label: 'Memory, session-search and skills guidance', tokens: 417, path: 'system_prompt.py _tool_guidance_block',
-    desc: 'How to use the memory tool (MEMORY.md vs USER.md), when to search past sessions, when to load a skill. Only present because those toolsets are enabled.', fate: 'Never compacted.' },
-  { id: 'steer', tier: 'stable', cat: 'system', label: 'Mid-turn steering note', tokens: 193, path: 'prompt_builder.py STEER_CHANNEL_NOTE',
-    desc: 'Explains that a message you send while Hermes is working arrives inside the next tool result.', fate: 'Never compacted.' },
-  { id: 'enforce', tier: 'stable', cat: 'system', label: 'Tool-use enforcement (DeepSeek-class)', tokens: 206, path: 'prompt_builder.py TOOL_USE_ENFORCEMENT_GUIDANCE',
-    desc: '“You MUST use your tools to take action — do not describe what you would do.” Hermes adds this for gpt, gemini, grok, glm, qwen, deepseek and muse models; Claude models do not get it.', fate: 'Never compacted.' },
-  { id: 'exec', tier: 'stable', cat: 'system', label: 'Execution guidance (DeepSeek-class)', tokens: 988, path: 'prompt_builder.py OPENAI_MODEL_EXECUTION_GUIDANCE',
-    desc: 'A second model-gated block (gpt, codex, grok, deepseek, kimi, qwen, glm, minimax, mistral, muse): execution discipline learned from agentic evals. Lines that mention tools not in this session are dropped. Switch the model to Claude and 1,194 tokens leave the prefix.', fate: 'Never compacted.' },
-  // context tier
-  { id: 'ctx', tier: 'context', cat: 'rules', label: 'AGENTS.md (your standing instructions)', tokens: 199, est: true, path: '~/AGENTS.md (sample, 781 chars)',
-    desc: 'Project context files. Hermes loads ONE type from the working directory, first found: .hermes.md, then the AGENTS.md chain, then CLAUDE.md, then .cursorrules, capped at 6% of the window in characters. Here: a short AGENTS.md in your home directory (who you are, how to answer, where papers and notes live, what stays on KIT models). Hermes’s own comment calls an AGENTS.md in the home directory “global config”: it loads, but does not switch on the coding posture. Start Hermes inside a code project and the same file also brings the coding brief and a workspace snapshot.',
-    fate: 'Re-read from disk at the prompt rebuild, so edits appear after a compaction or /new.' },
-  { id: 'platform', tier: 'context', cat: 'system', label: 'Platform hint (CLI)', tokens: 218, path: 'prompt_builder.py PLATFORM_HINTS["cli"]',
-    desc: '“You are in a plain terminal (CLI). Markdown does NOT render…”. The Telegram gateway sends a different hint; this is why the same agent formats answers differently per channel.', fate: 'Never compacted.' },
-  // volatile tier
-  { id: 'skills', tier: 'volatile', cat: 'skills', label: 'Skills index (58 bundled skills)', tokens: 1444, path: '~/.hermes/skills/ + bundled skills/',
-    desc: 'Only names and one-line descriptions, grouped by category. A skill you create with /learn adds one line here. A skill’s full SKILL.md enters the window only when Hermes calls skill_view or you type /skill-name.',
-    fate: 'Re-rendered at the prompt rebuild, so a skill learned mid-session shows up after the next compaction or /new.' },
-  { id: 'memory_md', tier: 'volatile', cat: 'memory', label: 'MEMORY.md (agent’s notes)', path: '~/.hermes/memories/MEMORY.md',
-    desc: 'The agent’s notes on your work and setup: conventions, quirks, finished work. Up to 2,200 characters (here 517), rendered under the header “MEMORY (your personal notes) [24%]”. A frozen snapshot of the file at session start.',
-    fate: 'Mid-session writes go to disk, not here. The window sees them when the prompt is rebuilt: after a compaction, or at /new.' },
-  { id: 'user_md', tier: 'volatile', cat: 'memory', label: 'USER.md (who you are)', path: '~/.hermes/memories/USER.md',
-    desc: 'About you: role, style, pet peeves. Up to 1,375 characters, rendered under “USER PROFILE (who the user is)”. Same frozen snapshot. Watch this row after the first message: the agent saves a memory and this number does not change until the prompt is rebuilt.',
-    fate: 'Re-read from disk at the prompt rebuild, so the note saved in this session appears then.' },
-  { id: 'profile', tier: 'volatile', cat: 'system', label: 'Active profile line', tokens: 81, path: 'system_prompt.py _active_profile_line',
-    desc: '“Active Hermes profile: default. Other profiles (if any) live under ~/.hermes/profiles/&lt;name&gt;/…”. A profile is a whole separate Hermes home (its own config.yaml, SOUL.md, memories/, skills/, cron, sessions). It decides WHICH SOUL.md, MEMORY.md, USER.md and skills you see in this list; the only thing it adds to the window itself is this one line.',
-    fate: 'Never compacted.' },
-  { id: 'date', tier: 'volatile', cat: 'system', label: 'Date line + Model / Provider / Platform', tokens: 36, path: 'system_prompt.py _timestamp_line',
-    desc: '“Conversation started: Thursday, October 16, 2026 (Europe/Berlin, CEST, UTC+02:00)” then Model: kit.deepseek-v4-flash, Provider: kit, Platform: cli. Date only, so the prompt bytes stay identical all day for the prefix cache.',
-    fate: 'On a rebuild after midnight Hermes adds an “as of” line so the agent knows what day it is.' },
-  { id: 'runtime', tier: 'volatile', cat: 'system', label: 'Runtime environment', tokens: 89, path: 'prompt_builder.py build_environment_hints',
-    desc: '“# Hermes runtime environment”: host OS, home directory, working directory, scratch directory. With the Docker backend (Part 10) this block describes the container instead of your machine.',
-    fate: 'Never compacted.' },
-  { id: 'note', tier: 'volatile', cat: 'system', label: 'Compaction note', tokens: 93, path: 'context_compressor.py _COMPRESSION_NOTE', onlyCompacted: true,
-    desc: 'Appended to the rebuilt system prompt after the first compaction: tells the model that earlier context was summarized and how to recover details with session_search.',
-    fate: 'Stays for the rest of the session.' },
-  // tool schemas: the `tools` parameter of every request (toolsets.py _HERMES_CORE_TOOLS; schemas measured from the registry)
-  { id: 'ts_web', tier: 'tools', cat: 'tools', label: 'web: web_search, web_extract', tokens: 426, path: 'tools/web_tools.py', desc: 'JSON schemas of the two web tools. Without an API key, searches go anonymously to the search providers (Part 3).', fate: 'Never compacted.' },
-  { id: 'ts_terminal', tier: 'tools', cat: 'tools', label: 'terminal: terminal, process_manage', tokens: 1012, path: 'tools/terminal_tool.py', desc: 'Shell access on the local backend or inside Docker. Output is capped at 50,000 chars per call (first 40% + last 60% kept).', fate: 'Never compacted.' },
-  { id: 'ts_file', tier: 'tools', cat: 'tools', label: 'file: read_file, write_file, patch, search_files', tokens: 1301, path: 'tools/file_tools.py', desc: 'File tools. read_file returns at most 100,000 chars per call.', fate: 'Never compacted.' },
-  { id: 'ts_memory', tier: 'tools', cat: 'tools', label: 'memory', tokens: 780, path: 'tools/memory_tool.py', desc: 'One tool with add / replace / remove actions on MEMORY.md and USER.md. Its schema alone is bigger than both memory files.', fate: 'Never compacted.' },
-  { id: 'ts_delegate', tier: 'tools', cat: 'tools', label: 'delegate_task (subagents)', tokens: 130, path: 'tools/delegate_tool.py', desc: 'Spawns up to 10 subagents with fresh context windows. Smallest schema, biggest context saver.', fate: 'Never compacted.' },
-  { id: 'ts_cron', tier: 'tools', cat: 'tools', label: 'cronjob_manage', tokens: 1670, path: 'tools/cronjob_tool.py', desc: 'Create and manage scheduled jobs from chat (Part 9). The biggest single schema in the default set.', fate: 'Never compacted.' },
-  { id: 'ts_media', tier: 'tools', cat: 'tools', label: 'vision_analyze, text_to_speech, image_generate', tokens: 659, path: 'tools/', desc: 'Vision and voice. Speech-to-text is not a model tool; the gateway transcribes voice notes before they reach the model.', fate: 'Never compacted.' },
-  { id: 'ts_browser', tier: 'tools', cat: 'tools', label: 'browser (14 tools)', tokens: 3702, path: 'tools/browser_tool.py', desc: 'Headless browser: navigate, snapshot, click, type, scroll… Enabled by default in the CLI toolset even if you never use it. `hermes tools` lets you switch it off and these cells disappear.', fate: 'Never compacted.' },
-  { id: 'ts_misc', tier: 'tools', cat: 'tools', label: 'skills (3), session_search, todo_list, clarify, execute_code', tokens: 2467, path: 'tools/', desc: 'skills_list / skill_view / skill_manage, search of past sessions, a todo list, a clarifying-question tool and a code sandbox.', fate: 'Never compacted.' },
-  { id: 'ts_ops', tier: 'tools', cat: 'tools', label: 'computer_use, manage_connections', tokens: 2489, path: 'tools/', desc: 'Desktop control and connector account status. Measured but rarely used in a terminal session.', fate: 'Never compacted.' }
+  // stable
+  { id: 'soul', tier: 'stable', cat: 'system', label: 'SOUL.md (identity)', tokens: 167, path: '~/.hermes/SOUL.md', desc: 'Who the agent is; the first thing in the prompt. Seeded on first run with the default persona; edit it and the personality changes. One per profile.', fate: 'Never compacted. Re-read when the prompt is rebuilt.' },
+  { id: 'help', tier: 'stable', cat: 'system', label: 'Hermes help pointer', tokens: 150, path: 'prompt_builder.py HERMES_AGENT_HELP_GUIDANCE', desc: 'Questions about Hermes itself go to the hermes-agent skill, not to guesswork.', fate: 'Never compacted.' },
+  { id: 'guid', tier: 'stable', cat: 'system', label: 'Task-completion + parallel-tool guidance', tokens: 348, path: 'prompt_builder.py TASK_COMPLETION_GUIDANCE, PARALLEL_TOOL_CALL_GUIDANCE', desc: 'Finish the job, never fabricate, call independent tools in parallel.', fate: 'Never compacted.' },
+  { id: 'toolg', tier: 'stable', cat: 'system', label: 'Memory, session-search and skills guidance', tokens: 417, path: 'system_prompt.py _tool_guidance_block', desc: 'How to use memory, session search and skills. Present because those toolsets are on.', fate: 'Never compacted.' },
+  { id: 'steer', tier: 'stable', cat: 'system', label: 'Mid-turn steering note', tokens: 193, path: 'prompt_builder.py STEER_CHANNEL_NOTE', desc: 'A message you send mid-turn arrives inside the next tool result.', fate: 'Never compacted.' },
+  { id: 'enforce', tier: 'stable', cat: 'system', label: 'Tool-use enforcement (DeepSeek-class)', tokens: 206, path: 'prompt_builder.py TOOL_USE_ENFORCEMENT_GUIDANCE', desc: '“You MUST use your tools to take action…”. Added for gpt, gemini, grok, glm, qwen and deepseek models; Claude models do not get it.', fate: 'Never compacted.' },
+  { id: 'exec', tier: 'stable', cat: 'system', label: 'Execution guidance (DeepSeek-class)', tokens: 988, path: 'prompt_builder.py OPENAI_MODEL_EXECUTION_GUIDANCE', desc: 'Execution discipline for gpt, deepseek, kimi, qwen, glm and mistral models. Switch to Claude and 1,194 tokens leave the prefix.', fate: 'Never compacted.' },
+  // context
+  { id: 'ctx', tier: 'context', cat: 'rules', label: 'AGENTS.md (your standing instructions)', tokens: 202, est: true, path: '~/AGENTS.md (sample, 793 chars)', desc: 'One project context file type loads from the working directory: .hermes.md, else AGENTS.md, else CLAUDE.md, else .cursorrules; capped at 6% of the window. In the home directory Hermes calls it “global config” and keeps its general posture. Inside a code project the same file also brings the coding brief.', fate: 'Re-read at the prompt rebuild.' },
+  { id: 'platform', tier: 'context', cat: 'system', label: 'Platform hint (CLI)', tokens: 218, path: 'prompt_builder.py PLATFORM_HINTS["cli"]', desc: '“You are in a plain terminal (CLI). Markdown does NOT render…”. Telegram gets a different hint.', fate: 'Never compacted.' },
+  // volatile
+  { id: 'skills', tier: 'volatile', cat: 'skills', label: 'Skills index (58 bundled skills)', tokens: 1444, path: '~/.hermes/skills/ + bundled skills/', desc: 'Names and one-liners only. A skill’s full SKILL.md enters when loaded with skill_view or /skill-name.', fate: 'Re-rendered at the prompt rebuild.' },
+  { id: 'memory_md', tier: 'volatile', cat: 'memory', label: 'MEMORY.md (agent’s notes)', path: '~/.hermes/memories/MEMORY.md', desc: 'The agent’s notes on your work and setup, up to 2,200 chars (here 517). A snapshot taken at session start.', fate: 'Mid-session writes go to disk. The window sees them after a compaction or /new.' },
+  { id: 'user_md', tier: 'volatile', cat: 'memory', label: 'USER.md (who you are)', path: '~/.hermes/memories/USER.md', desc: 'About you: role, style, preferences, up to 1,375 chars (here 364). Same snapshot: this number stays put when the agent saves a memory.', fate: 'Mid-session writes go to disk. The window sees them after a compaction or /new.' },
+  { id: 'profile', tier: 'volatile', cat: 'system', label: 'Active profile line', tokens: 81, path: 'system_prompt.py _active_profile_line', desc: '“Active Hermes profile: default…”. A profile is a separate Hermes home (config, SOUL.md, memories, skills, cron, sessions). It decides which files load above; it adds only this line.', fate: 'Never compacted.' },
+  { id: 'date', tier: 'volatile', cat: 'system', label: 'Date line + Model / Provider / Platform', tokens: 36, path: 'system_prompt.py _timestamp_line', desc: 'Date and timezone, then Model, Provider, Platform. Date only, so the bytes stay cacheable all day.', fate: 'A rebuild after midnight adds an “as of” line.' },
+  { id: 'runtime', tier: 'volatile', cat: 'system', label: 'Runtime environment', tokens: 89, path: 'prompt_builder.py build_environment_hints', desc: 'Host OS, home, working and scratch directory. With the Docker backend this describes the container.', fate: 'Never compacted.' },
+  { id: 'note', tier: 'volatile', cat: 'system', label: 'Compaction note', tokens: 93, path: 'context_compressor.py _COMPRESSION_NOTE', onlyCompacted: true, desc: 'Added after the first compaction: earlier context was summarized; recover details with session_search.', fate: 'Stays for the session.' },
+  // tool schemas: the `tools` parameter of every request (toolsets.py _HERMES_CORE_TOOLS; measured from the registry)
+  { id: 'ts_web', tier: 'tools', cat: 'tools', label: 'web: web_search, web_extract', tokens: 426, path: 'tools/web_tools.py', desc: 'Two web tools. web_extract returns at most 100,000 chars per call.', fate: 'Never compacted.' },
+  { id: 'ts_terminal', tier: 'tools', cat: 'tools', label: 'terminal: terminal, process_manage', tokens: 1012, path: 'tools/terminal_tool.py', desc: 'Shell on the host or in Docker. Output capped at 50,000 chars per call.', fate: 'Never compacted.' },
+  { id: 'ts_file', tier: 'tools', cat: 'tools', label: 'file: read_file, write_file, patch, search_files', tokens: 1301, path: 'tools/file_tools.py', desc: 'read_file returns at most 100,000 chars per call.', fate: 'Never compacted.' },
+  { id: 'ts_memory', tier: 'tools', cat: 'tools', label: 'memory', tokens: 780, path: 'tools/memory_tool.py', desc: 'add / replace / remove on MEMORY.md and USER.md. The schema is bigger than both files.', fate: 'Never compacted.' },
+  { id: 'ts_delegate', tier: 'tools', cat: 'tools', label: 'delegate_task (subagents)', tokens: 130, path: 'tools/delegate_tool.py', desc: 'Up to 10 subagents, each with a fresh window. Smallest schema, biggest context saver.', fate: 'Never compacted.' },
+  { id: 'ts_cron', tier: 'tools', cat: 'tools', label: 'cronjob_manage', tokens: 1670, path: 'tools/cronjob_tool.py', desc: 'Scheduled jobs from chat. The biggest single schema.', fate: 'Never compacted.' },
+  { id: 'ts_media', tier: 'tools', cat: 'tools', label: 'vision_analyze, text_to_speech, image_generate', tokens: 659, path: 'tools/', desc: 'Vision and voice tools.', fate: 'Never compacted.' },
+  { id: 'ts_browser', tier: 'tools', cat: 'tools', label: 'browser (14 tools)', tokens: 3702, path: 'tools/browser_tool.py', desc: 'Headless browser, on by default in the CLI toolset. Switch it off in hermes tools and these cells go.', fate: 'Never compacted.' },
+  { id: 'ts_misc', tier: 'tools', cat: 'tools', label: 'skills (3), session_search, todo_list, clarify, execute_code', tokens: 2467, path: 'tools/', desc: 'Skills, session search, todo list, clarifying questions, code sandbox.', fate: 'Never compacted.' },
+  { id: 'ts_ops', tier: 'tools', cat: 'tools', label: 'computer_use, manage_connections', tokens: 2489, path: 'tools/', desc: 'Desktop control and connector status.', fate: 'Never compacted.' }
 ];
 var MEMORY_HEADER_CHARS = 129, USER_HEADER_CHARS = 131;      // "═"×46 + title + usage + "═"×46 (memory_tool_store.py _render_block)
 var MEMORY_MD_CHARS = 517, USER_MD_CHARS = 364;               // sample files for this scenario (caps: 2,200 / 1,375)
@@ -335,8 +309,8 @@ function readingBatch() {
   return rows;
 }
 var SCRIPT = [
-  { role: 'user', title: 'Hi, I’m a PhD student at KIT…', tokens: 40, text: 'Hi! I’m a PhD student at KIT working on differential privacy in practice. I prefer short bullet answers.' },
-  { role: 'assistant', title: 'memory(add → USER.md)', tokens: 80, tool: 'memory', text: 'tool_call: memory(action="add", target="user", content="PhD student at KIT working on differential privacy in practice. Prefers short bullet answers.")' },
+  { role: 'user', title: 'Hi, I’m a PhD student…', tokens: 40, text: 'Hi! I’m a PhD student working on differential privacy in practice. I prefer short bullet answers.' },
+  { role: 'assistant', title: 'memory(add → USER.md)', tokens: 80, tool: 'memory', text: 'tool_call: memory(action="add", target="user", content="PhD student working on differential privacy in practice. Prefers short bullet answers.")' },
   { role: 'tool', title: 'memory → saved (USER.md 514/1,375 chars)', tokens: 30, tool: 'memory', kind: 'memory', memChars: 150, text: 'Write saved. USER.md at 514/1,375 chars. This update is complete — do not repeat it.\n\n[On disk now. NOT in the system prompt: USER.md was rendered once at session start.]' },
   { role: 'assistant', title: 'Noted. What do you need?', tokens: 30, text: '• Noted: DP in practice, short bullets.\n• What do you need?' },
   { role: 'user', title: 'What’s new on DP this week? Search the web.', tokens: 30, text: 'What’s new on differential privacy this week? Search the web.' },
@@ -686,20 +660,20 @@ function esc(s) { return s.replace(/&/g, '&amp;').replace(/</g, '&lt;'); }
 var detailEl = document.getElementById('detail');
 function fateText(m) {
   var W = state.W, budget = tailBudget(W);
-  if (m.kind === 'summary') return 'One auxiliary-model call wrote this: a structured summary (' + fmt(m.llm) + '-token budget) plus mechanical appendices: an anchor index harvested by regex (file paths, #numbers, *Error lines, URLs), the user’s messages quoted verbatim, and a recovery footer pointing to session_search. It replaces ' + m.rowsIn + ' rows (' + fmtK(m.contentTokens) + ' tokens).';
-  if (m.status === 'pruned') return 'Phase 1, no LLM: a tool result over 200 chars outside the protected tail becomes “[Old tool output cleared to save context space]”. The full text is still in the session database, reachable with session_search.';
-  if (m.status === 'dup') return 'Identical to a more recent tool result, so it became “[Duplicate tool output — same content as a more recent call]”.';
-  if (m.status === 'skill_pruned') return 'Skill bodies are cut to “[SKILL_PRUNED: content lost in compression; reload with skill_view(name=…)]”. Hermes must reload the skill before relying on it.';
-  if (m.status === 'demoted') return 'Inside the protected tail but older than the newest 6 tool rounds and over 1,500 chars, so Hermes demoted it to a recovery stub.';
+  if (m.kind === 'summary') return 'Written by one auxiliary-model call: a structured summary (' + fmt(m.llm) + '-token budget) plus mechanical appendices: regex anchors (paths, #numbers, *Error lines, URLs), your messages verbatim, a session_search pointer. Replaces ' + m.rowsIn + ' rows (' + fmtK(m.contentTokens) + ' tokens).';
+  if (m.status === 'pruned') return 'Over 200 chars and outside the tail → “[Old tool output cleared to save context space]”. The full text stays in the session database.';
+  if (m.status === 'dup') return 'Same as a more recent result → “[Duplicate tool output — same content as a more recent call]”.';
+  if (m.status === 'skill_pruned') return 'Skill body → “[SKILL_PRUNED: … reload with skill_view]”.';
+  if (m.status === 'demoted') return 'In the tail but older than the newest 6 tool rounds and over 1,500 chars → recovery stub.';
   var z = zoneOf(m);
-  if (z === 'head') return 'Protected head: the first 3 rows survive the first compaction verbatim. That protection drops to 0 afterwards.';
-  if (z === 'tail-floor') return 'Protected tail, for now: Hermes always keeps at least the newest 8 rows verbatim, whole tool rounds together, even when they exceed the ' + fmtK(budget) + '-token tail budget. As the session grows this row falls out of the tail and becomes a stub.';
-  if (z === 'tail') return 'Protected tail: the newest rows, up to ' + fmtK(budget) + ' tokens (2.5% of the window, clamped 10K–25K), survive verbatim, whole tool rounds together, always including the last user message.';
-  if (m.role === 'user') return 'At compaction: quoted verbatim into the summary’s “## User Messages” section (up to 4,000 chars per message), so your instructions survive even when the rest is paraphrased.';
-  if (m.kind === 'skill') return 'At compaction: cut to a [SKILL_PRUNED: …] marker unless it sits in the protected tail.';
-  if (m.kind === 'subagent') return 'At compaction: treated like any tool result. Note the 41,000 tokens the sub-agent read never entered this window at all; only its report did.';
-  if (m.role === 'tool') return m.tokens > PRUNE_MIN_TOKENS ? 'At compaction: over 200 chars, so it becomes a 12-token stub before the summarizer even runs. Exact lines survive only if a regex anchor (file paths, #numbers, *Error lines, URLs) catches them.' : 'At compaction: under 200 chars, so it stays as-is until it falls into the summarized middle.';
-  return 'At compaction: folded into the structured summary by an auxiliary model. Exact numbers and decisions survive only if the summarizer keeps them.';
+  if (z === 'head') return 'Protected head: the first 3 rows survive the first compaction verbatim, not the next.';
+  if (z === 'tail-floor') return 'Protected tail, for now: Hermes keeps at least the newest 8 rows, even past the ' + fmtK(budget) + ' tail budget. As the session grows this row becomes a stub.';
+  if (z === 'tail') return 'Protected tail: the newest rows up to ' + fmtK(budget) + ' tokens (2.5% of the window, 10K–25K) survive verbatim, whole tool rounds together.';
+  if (m.role === 'user') return 'Quoted verbatim into the summary (up to 4,000 chars).';
+  if (m.kind === 'skill') return 'Cut to a [SKILL_PRUNED] marker unless in the tail.';
+  if (m.kind === 'subagent') return 'Treated like any tool result. What the subagent read never entered this window.';
+  if (m.role === 'tool') return m.tokens > PRUNE_MIN_TOKENS ? 'Over 200 chars: becomes a 12-token stub before the summarizer runs. Lines survive only through regex anchors.' : 'Under 200 chars: stays until it falls into the summarized middle.';
+  return 'Folded into the summary by an auxiliary model; details survive only if it keeps them.';
 }
 function zoneOf(m) {
   var msgs = ui.sim.msgs, idx = msgs.indexOf(m), headN = ui.sim.count === 0 ? PROTECT_FIRST_N : 0;
@@ -715,32 +689,32 @@ function zoneOf(m) {
 }
 function takeaway() {
   var step = tickToStep(ui.tick), W = state.W;
-  if (ui.tick < 0) return 'Nothing is in the window yet. Press Start.';
+  if (ui.tick < 0) return 'Nothing in the window yet. Press Start.';
   var lastC = ui.sim.compactions[ui.sim.compactions.length - 1];
-  if (ui.sim.tripped) return 'Two compactions in a row left the prompt over the trigger: a round of five parallel reads is bigger than this window, and the protected tail keeps whole tool rounds. Hermes’s anti-thrash breaker now switches auto-compaction off, and the provider rejects every call. A 64K window cannot do this job; delegate it or read fewer files per round.';
-  if (lastC && lastC.forced && ui.tick === lastCompactTick()) return 'You ran /compress: the same four phases Hermes runs automatically, on demand. Old tool outputs became stubs, the middle became one summary row, the newest rows survived verbatim, and the system prompt was rebuilt: USER.md now includes what the agent saved, and a compaction note was added.';
-  if (ui.sim.skipped && ui.sim.total > W) return 'The prompt is now larger than the window. Hermes tried to compact at ' + fmtK(ui.sim.thr) + ' but the protected head (3 rows) and tail (at least 8 rows) covered every row, so there was nothing to cut. A real provider would reject this call; Hermes needs a few more rows before it can fold anything.';
-  if (step >= 0 && ui.sim.total >= ui.sim.thr && !(ui.sim.count && ui.tick === lastCompactTick())) return 'The prompt is now past the trigger' + (ui.sim.total > W ? ', even past the window' : '') + ': tool results are appended as they land, and Hermes compacts before the NEXT model call, not when a result arrives. Press Next.';
-  if (ui.sim.count && ui.tick === lastCompactTick()) return 'Compaction did not wait for the window to be full: Hermes fires it when the prompt reaches ' + fmtK(ui.sim.thr) + ' tokens (' + Math.round(ui.sim.thr / W * 100) + '% of ' + fmtK(W) + '). Old tool outputs became stubs, the middle became one summary row, the newest rows survived verbatim, and the system prompt was rebuilt: USER.md now includes what the agent saved, and a compaction note was added.';
+  if (ui.sim.tripped) return 'A round of five reads is bigger than this window and the protected tail keeps whole rounds, so two compactions in a row stayed over the trigger. Hermes’s anti-thrash breaker switched auto-compaction off; every call now overflows.';
+  if (lastC && lastC.forced && ui.tick === lastCompactTick()) return 'You ran /compress: the same four phases, on demand. Old tool outputs → stubs, the middle → one summary row, newest rows kept, prompt rebuilt with USER.md re-read.';
+  if (ui.sim.skipped && ui.sim.total > W) return 'Over the window and nothing to cut: the protected head and tail cover every row. A real provider would reject this call.';
+  if (step >= 0 && ui.sim.total >= ui.sim.thr && !(ui.sim.count && ui.tick === lastCompactTick())) return 'Past the trigger' + (ui.sim.total > W ? ', even past the window' : '') + '. Results are appended as they land; Hermes compacts before the next model call. Press Next.';
+  if (ui.sim.count && ui.tick === lastCompactTick()) return 'Fired at ' + fmtK(ui.sim.thr) + ' (' + Math.round(ui.sim.thr / W * 100) + '% of ' + fmtK(W) + '), not at 100%. Old tool outputs → stubs, the middle → one summary row, newest rows kept verbatim, prompt rebuilt with USER.md re-read.';
   if (step < 0) {
     var r = BOOT_ROWS[ui.tick];
-    if (r.tier === 'stable') return 'Hermes builds the system prompt once per session in three parts it calls stable, context and volatile. Stable comes first: SOUL.md (who the agent is), then guidance text. Two of these blocks exist only because the model is DeepSeek-class.';
-    if (r.tier === 'context') return 'Context holds whatever the working directory contributes: your AGENTS.md of standing instructions, and the platform hint. In a code project this part would also carry Hermes’s coding brief and a git snapshot.';
-    if (r.tier === 'volatile') return 'Volatile comes last so the stable part stays cacheable: the skills index, MEMORY.md and USER.md (frozen snapshots), the profile line, the date and the runtime environment. This is where the memory files live.';
-    return 'Tool schemas are not prompt text; they travel in the request’s tools parameter. They are the biggest fixed cost, about two thirds of everything sent before your first word, and the browser toolset alone is bigger than the whole system prompt.';
+    if (r.tier === 'stable') return 'The prompt is built once per session in three parts: stable, context, volatile. Stable first: SOUL.md, then guidance. Two blocks exist only for DeepSeek-class models.';
+    if (r.tier === 'context') return 'Context: what the working directory contributes, here an AGENTS.md and the platform hint. In a code project: the coding brief and a git snapshot too.';
+    if (r.tier === 'volatile') return 'Volatile, last so the rest stays cacheable: skills index, MEMORY.md, USER.md, profile line, date, runtime. The memory files live here.';
+    return 'Tool schemas travel in the tools parameter, not the prompt. Two thirds of everything sent before your first word; the browser toolset alone outweighs the system prompt.';
   }
-  if (step === 0) return 'Your first message is tiny: ' + fmtK(ui.sim.prefix.total) + ' tokens were already in the window before it. Most of what the model reads is setup, not your words.';
+  if (step === 0) return 'Your first message is tiny: ' + fmtK(ui.sim.prefix.total) + ' tokens were already there.';
   var src = SCRIPT[step];
-  if (src.kind === 'memory') return 'Hermes saved a memory, but to disk (~/.hermes/memories/USER.md). The USER.md row above was rendered at session start, so the window sees this note only after the prompt is rebuilt: at the next compaction, or after /new.';
-  if (src.kind === 'subagent') return 'Each subagent read about 30K tokens of pages in its own window. Only its report (about 500 tokens) entered this one. Delegation is how an agent keeps large reads out of its context.';
-  if (src.batch && src.tool === 'read_file') return 'Batch work fills the window fastest: five parallel read_file calls land up to 125K tokens in one round, re-sent on every call from then on. This is the request that reaches even a 1M trigger.';
-  if (src.batch && src.role === 'assistant' && !src.tool) return 'The summaries are small; it is the reads that fill the window, and they stay in it after the summary is written.';
-  if (atEnd() && !ui.sim.count) return 'At ' + fmtK(W) + ' the trigger is ' + fmtK(ui.sim.thr) + ' tokens and this day never reached it.';
-  if (atEnd() && lastC && lastC.forced) return 'Session over: auto-compaction never fired at ' + fmtK(W) + ' (trigger ' + fmtK(ui.sim.thr) + '); your /compress did the same work on demand. Cap the window at 128K and replay to watch it fire by itself.';
-  if (atEnd()) return 'Session over: Hermes compacted ' + ui.sim.count + '× under a ' + fmtK(W) + ' window, all of it during the 60-paper summary. Switch the window above and replay.';
-  if (src.role === 'tool' && src.tokens >= 9000) return 'Tool results dominate. Each one lands in the window and stays there, re-sent on every call. Hermes caps a single read_file or web_extract at 100,000 chars and terminal output at 50,000.';
-  if (src.role === 'user') return 'A new request adds to the same window. Everything from earlier today is still in it, and still re-sent.';
-  return 'Every call re-sends the whole window: prefix plus the full history so far. Hover a row to see where it sits.';
+  if (src.kind === 'memory') return 'Saved to disk, not to the prompt. USER.md above updates only when the prompt is rebuilt: after a compaction, or /new.';
+  if (src.kind === 'subagent') return 'Each subagent read ~30K tokens in its own window; only its ~500-token report entered this one.';
+  if (src.batch && src.tool === 'read_file') return 'Five parallel reads land up to 125K tokens at once and stay, re-sent on every call. This is what reaches even a 1M trigger.';
+  if (src.batch && src.role === 'assistant' && !src.tool) return 'The summaries are small; the reads are what fill the window.';
+  if (atEnd() && !ui.sim.count) return 'Trigger ' + fmtK(ui.sim.thr) + ' never reached.';
+  if (atEnd() && lastC && lastC.forced) return 'Auto-compaction never fired at ' + fmtK(W) + '; your /compress did the same work. Cap at 128K and replay to see it fire by itself.';
+  if (atEnd()) return 'Compacted ' + ui.sim.count + '× under ' + fmtK(W) + ', all during the 60-paper job. Switch the window and replay.';
+  if (src.role === 'tool' && src.tokens >= 9000) return 'Tool results dominate: each stays in the window, re-sent on every call. read_file and web_extract cap at 100,000 chars, terminal at 50,000.';
+  if (src.role === 'user') return 'A new request adds to the same window; everything from before is still in it.';
+  return 'Every call re-sends the whole window. Hover a row to see where it sits.';
 }
 function renderDetail(segs) {
   var id = ui.sel || ui.hov, seg = id ? segs.filter(function (s) { return s.id === id; })[0] : null, html = '';
@@ -751,7 +725,7 @@ function renderDetail(segs) {
     var m = seg.msg, who = m.kind === 'summary' ? 'compaction summary' : m.role === 'user' ? 'you' : m.role === 'assistant' ? 'Hermes' + (m.tool ? ' · ' + m.tool : '') : 'tool result · ' + m.tool;
     html += '<div class="h"><i class="sw" style="--sw:' + CATS[seg.cat].sw + '"></i>' + esc(m.kind === 'summary' ? 'Compaction summary' : m.title) + '</div><div class="meta">' + fmt(seg.tokens) + ' tokens · ' + who + '</div>';
     var body = m.kind === 'summary' ? SUMMARY_PREVIEW : m.status === 'live' ? m.text : m.status === 'pruned' ? '[Old tool output cleared to save context space]' : m.status === 'dup' ? '[Duplicate tool output — same content as a more recent call]' : m.status === 'skill_pruned' ? '[SKILL_PRUNED: content lost in compression; reload with skill_view(name=\'python-debugpy\')]' : '[' + m.tool + ' output demoted at compaction — ' + fmt(SCRIPT[m.id].tokens * 4) + ' chars preserved in session history. Recover with session_search]';
-    html += '<pre>' + esc(body) + '</pre><div class="box"><div class="k">' + (m.status === 'live' && m.kind !== 'summary' ? 'What compaction will do' : 'What compaction did') + '</div>' + fateText(m) + '</div>';
+    html += '<pre>' + esc(body) + '</pre><div class="box"><div class="k">' + (m.status === 'live' && m.kind !== 'summary' ? 'At compaction' : 'What compaction did') + '</div>' + fateText(m) + '</div>';
   } else {
     html += '<div class="hint">Hover a row to see what it is and where it sits in the window.<br>Click to pin.</div>';
   }

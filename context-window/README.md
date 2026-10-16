@@ -5,7 +5,7 @@ One visual for teaching the **context window of an agent**, with
 the worked instance, set up the way the Hermes workshop sets it up: `hermes`
 started in the home directory of a workshop VM as a personal assistant (not in
 a code project), with a short `~/AGENTS.md` of standing instructions, model
-`kit.deepseek-v4-flash` on the KIT KI-Toolbox endpoint, profile `default`. A 500-cell grid (one cell = 0.2% of the window; Hermes's
+`deepseek-v4-flash`, profile `default`. A 500-cell grid (one cell = 0.2% of the window; Hermes's
 own `/context` command draws the same picture with 100 cells) fills as a day
 plays: what loads
 before the user types, what each request adds, and what compaction throws
@@ -36,7 +36,7 @@ order:
 | stable | Mid-turn steering note | 193 | `STEER_CHANNEL_NOTE` |
 | stable | Tool-use enforcement | 206 | `TOOL_USE_ENFORCEMENT_GUIDANCE`; gated on `TOOL_USE_ENFORCEMENT_MODELS`, which includes `deepseek` (`prompt_builder.py` L365) |
 | stable | Execution guidance | 988 | `OPENAI_MODEL_EXECUTION_GUIDANCE`; gated on `EXECUTION_GUIDANCE_MODELS`, which includes `deepseek` (L379-382) |
-| context | AGENTS.md | 199 | sample `~/AGENTS.md` (781 chars, rendered as `## AGENTS.md` + body); one project-context type loads, first found: `.hermes.md` → `AGENTS.md` chain → `CLAUDE.md` → `.cursorrules` (`prompt_builder.py` L1866-1867, `_context_section` L1714-1717) |
+| context | AGENTS.md | 202 | sample `~/AGENTS.md` (793 chars, rendered as `## AGENTS.md` + body); one project-context type loads, first found: `.hermes.md` → `AGENTS.md` chain → `CLAUDE.md` → `.cursorrules` (`prompt_builder.py` L1866-1867, `_context_section` L1714-1717) |
 | context | Platform hint (CLI) | 218 | `PLATFORM_HINTS["cli"]` |
 | volatile | Skills index | 1,444 | 58 bundled skills, names + descriptions |
 | volatile | MEMORY.md | 162 | header 129 chars + sample content 517 chars (cap 2,200) |
@@ -59,7 +59,7 @@ The sample AGENTS.md used for the count:
 # AGENTS.md — my research assistant
 
 ## Who I am
-PhD student at KIT, SECUSO group. Topic: differential privacy in practice
+PhD student in a privacy research group. Topic: differential privacy in practice
 (epsilon choice, real-world releases, adversary models). Supervisor meeting Tuesdays 10:00.
 
 ## How to answer
@@ -73,7 +73,7 @@ PhD student at KIT, SECUSO group. Topic: differential privacy in practice
 - Thesis: ~/phd/thesis (LaTeX; do not edit .tex files without asking)
 
 ## Rules
-- Personal data of colleagues stays on KIT models. Never send it to cloud tools.
+- Personal data of colleagues stays on the local model. Never send it to cloud tools.
 - Student data, study data and papers under review: never in any tool.
 ```
 
@@ -89,8 +89,9 @@ PhD student at KIT, SECUSO group. Topic: differential privacy in practice
   Click to pin.
 - **Context window** selector (1M, 200K, 128K, 64K): the same day replays
   under a different window. 1M is the default, Hermes's own figure for
-  `deepseek-v4-flash` (longest-key substring match, so `kit.deepseek-v4-flash`
-  resolves the same way unless the endpoint reports a window); the smaller
+  `deepseek-v4-flash` (longest-key substring match, so a prefixed id such as
+  `myprovider.deepseek-v4-flash` resolves the same way unless the endpoint
+  reports a window); the smaller
   values stand for the `model.context_length` cap in Hermes's config. The
   60-paper summary triggers auto-compaction at every window: twice at 1M,
   eleven times at 200K, fourteen at 128K; at 64K the breaker trips.
@@ -140,7 +141,7 @@ says why.
 | Memory caps | MEMORY.md 2,200 chars, USER.md 1,375 chars, frozen snapshot per session | `cli-config.yaml.example` L1005-1007; `tools/memory_tool_store.py` L618-644 |
 | Tool output caps | terminal 50,000 chars (keep first 40% / last 60%); read_file 100,000 chars | `tools/tool_output_limits.py` L13-15; `tools/file_tools.py` L52 |
 | Minimum window | 64,000 tokens | `model_metadata.py` L272; docs quickstart |
-| Window for `deepseek-v4-flash` | 1,000,000 tokens (DeepSeek native endpoint); lookups are longest-key-first substring matches, so `kit.deepseek-v4-flash` resolves to it | `model_metadata.py` L288, L314, L559 |
+| Window for `deepseek-v4-flash` | 1,000,000 tokens (DeepSeek native endpoint); lookups are longest-key-first substring matches, so a prefixed id resolves to it too | `model_metadata.py` L288, L314, L559 |
 | `model.context_length` config cap | caps the detected window | `cli-config.yaml.example` L135-145 |
 | Status-bar model label | model id, reverse-aliased, split on `/`, truncated at 26 chars | `hermes_cli/cli_status_bar_mixin.py` L196-207 |
 | Session tools | `read_file`, `write_file`, `terminal`, `memory`, `delegate_task`, `web_search`, `web_extract` are registered Hermes tools; `web_extract` and `read_file` return at most 100,000 chars | `tools/file_tools.py` L1395-1420, `terminal_tool.py` L1631, `skills_tool.py` L746, `memory_tool.py` L477, `delegate_tool.py` L800, `web_tools.py` L560-572 |
@@ -155,7 +156,7 @@ says why.
 `ceil(chars / 4)`, no Hermes code executed): every token count in the prefix
 table above except the ones marked sample.
 
-**Sample:** the AGENTS.md, MEMORY.md and USER.md contents (781, 517 and 364
+**Sample:** the AGENTS.md, MEMORY.md and USER.md contents (793, 517 and 364
 chars) and the runtime-environment lines (353 chars for a Linux VM).
 
 **Scripted:** the day's messages and their token counts, the subagents'
@@ -163,7 +164,7 @@ chars) and the runtime-environment lines (353 chars for a Linux VM).
 template).
 
 Behaviour of the scripted day under the real rules, from a headless run of the
-page's simulation core (prefix 19,589 tokens; conversation 1,098,222 tokens,
+page's simulation core (prefix 19,592 tokens; conversation 1,098,222 tokens,
 of which the reads are about 1,030,000):
 
 | Window | Trigger | Compactions | Notes |
