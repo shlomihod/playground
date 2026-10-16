@@ -1,11 +1,14 @@
 # Context window demo
 
 One visual for teaching the **context window of an agent**, with
-[Hermes Agent](https://github.com/NousResearch/hermes-agent) (Nous Research)
-running DeepSeek V4 Flash as the worked instance. A 100-cell grid (one cell = 1% of the window, the same
-metaphor as Hermes's own `/context` command) fills as a session plays: what
-loads before the user types, what each tool call adds, and what compaction
-throws away. The shape follows Anthropic's
+[Hermes Agent](https://github.com/NousResearch/hermes-agent) (Nous Research) as
+the worked instance, set up the way the Hermes workshop sets it up: `hermes`
+started in the home directory of a workshop VM as a personal assistant (not in
+a project), model `kit.deepseek-v4-flash` on the KIT KI-Toolbox endpoint,
+profile `default`. A 100-cell grid (one cell = 1% of the window, the same
+metaphor as Hermes's own `/context` command) fills as a day plays: what loads
+before the user types, what each request adds, and what compaction throws
+away. The shape follows Anthropic's
 ["Explore the context window"](https://code.claude.com/docs/en/context-window)
 simulation for Claude Code: a timeline that fills a bar, gates where "you type"
 the next prompt, a hover pane explaining each event, and a compaction at the
@@ -15,23 +18,72 @@ Self-contained static page: no build, no dependencies, no network calls. Theme
 (light/dark) is inlined and shares the `playground-theme` key with the other
 demos. Listed on the hub like the other main demos.
 
+## What loads before you type (Hermes's system prompt, in order)
+
+Hermes builds the system prompt once per session in three cache tiers
+(`agent/system_prompt.py` `build_system_prompt_parts`), then sends the tool
+schemas as the request's `tools` parameter. The page lists them in that order:
+
+| Tier | Row | Tokens | Where it comes from |
+|---|---|---|---|
+| stable | SOUL.md (identity) | 167 | `~/.hermes/SOUL.md`, seeded on first run with the default persona (`hermes_cli/default_soul.py`, 667 chars) |
+| stable | Hermes help pointer | 150 | `HERMES_AGENT_HELP_GUIDANCE` |
+| stable | Task-completion + parallel-tool guidance | 348 | `TASK_COMPLETION_GUIDANCE` + `PARALLEL_TOOL_CALL_GUIDANCE` |
+| stable | Memory / session-search / skills guidance | 417 | `_tool_guidance_block` |
+| stable | Mid-turn steering note | 193 | `STEER_CHANNEL_NOTE` |
+| stable | Tool-use enforcement | 206 | `TOOL_USE_ENFORCEMENT_GUIDANCE`; gated on `TOOL_USE_ENFORCEMENT_MODELS`, which includes `deepseek` (`prompt_builder.py` L365) |
+| stable | Execution guidance | 988 | `OPENAI_MODEL_EXECUTION_GUIDANCE`; gated on `EXECUTION_GUIDANCE_MODELS`, which includes `deepseek` (L379-382) |
+| context | Project context files | 0 | none in `$HOME`; one type loads when present: `.hermes.md` → `AGENTS.md` chain → `CLAUDE.md` → `.cursorrules` (`prompt_builder.py` L1866-1867) |
+| context | Platform hint (CLI) | 218 | `PLATFORM_HINTS["cli"]` |
+| volatile | Skills index | 1,444 | 58 bundled skills, names + descriptions |
+| volatile | MEMORY.md | 162 | header 129 chars + sample content 517 chars (cap 2,200) |
+| volatile | USER.md | 124 | header 131 chars + sample content 364 chars (cap 1,375); grows to 179 after the prompt rebuild |
+| volatile | Active profile line | 81 | `_active_profile_line` with `~/.hermes` as root |
+| volatile | Date line + Model/Provider/Platform | 36 | `_timestamp_line` |
+| volatile | Runtime environment | 89 | `build_environment_hints`, local Linux host (sample) |
+| volatile | Compaction note | 93 | `_COMPRESSION_NOTE`, only after the first compaction |
+| tools | 37 core tools in 10 toolset rows | 14,636 | `toolsets.py` `_HERMES_CORE_TOOLS`, schemas measured from the registry; the 14 kanban tools were not resolved |
+| mcp | calendar (3 tools), tasks (4 tools) | 390 + 520 | estimates, about 130 tokens per tool; names follow `mcp__server__tool` (`tools/mcp_tool_schema.py` L159-175) |
+
+No coding brief and no workspace snapshot: a home directory is not a code
+workspace, so `coding_context.py` `_detect_profile` returns the general
+posture (L262-277). A profile (`hermes profile create coder`) is a separate
+Hermes home under `~/.hermes/profiles/<name>/` with its own `config.yaml`,
+`SOUL.md`, `memories/`, `skills/`, cron and sessions; it decides which of the
+rows above load, and adds only the one-line profile line to the window.
+
 ## How to drive it
 
-- **Start session** plays the prefix loading, then pauses at a gate where the
-  user's prompt waits to be sent. Play continues through Hermes's tool calls,
-  pauses at the next user prompt, and pauses right after a compaction so the
-  change is visible.
+- **Start session** plays the prefix loading row by row (tier by tier), then
+  pauses at a gate where the user's first message waits to be sent. Play
+  continues through Hermes's tool calls, pauses at each next user message, and
+  pauses right after a compaction so the change is visible.
 - **Next** steps one event at a time; `→` and `space` do the same.
 - **Hover** a timeline row: its cells light up in the grid and the pane says
-  what it is and what compaction will do (or did) to it. Click to pin.
-- **Context window** selector (1M, 200K, 128K, 64K): the same session replays
+  what it is, where it comes from, and what compaction will do (or did) to it.
+  Click to pin.
+- **Context window** selector (1M, 200K, 128K, 64K): the same day replays
   under a different window. 1M is the default, Hermes's own figure for
-  `deepseek-v4-flash`; the smaller values stand for the `model.context_length`
-  cap in Hermes's config. At 1M auto-compaction never fires, so a `/compress`
-  gate is offered at the end; at 200K it fires once, late; at 128K once,
-  mid-session; at 64K five times.
-- Deep links: `?window=128000&step=19` (step is 1-based; `step=0` shows the
-  loaded prefix).
+  `deepseek-v4-flash` (longest-key substring match, so `kit.deepseek-v4-flash`
+  resolves the same way unless the endpoint reports a window); the smaller
+  values stand for the `model.context_length` cap in Hermes's config. At 1M
+  and 200K auto-compaction never fires, so a `/compress` gate is offered at
+  the end; at 128K it fires once, mid-session; at 64K five times, one of them
+  ineffective.
+- Deep links: `?window=128000&step=25` (step is 1-based; `step=0` shows the
+  loaded prefix). For a class, link `?window=128000` so the grid fills and
+  compaction fires during playback.
+
+## The scripted day
+
+The requests are the ones the workshop's Part 1 demo uses, in the order the
+workshop builds them: introduce yourself (memory write to USER.md), web
+search, "my latest papers on arXiv" (the bundled `arxiv` skill via
+`skill_view`, then its script in `terminal`), download and read two papers
+(`read_file`, capped at 100,000 chars each), `/llm-wiki ingest` (a skill slash
+command, which pastes the 20,121-char SKILL.md into the user message), calendar
+and tasks through two MCP servers, a three-subagent trip plan
+(`delegate_task`), and a task plus a second memory write. 45 messages.
 
 ## What is real and what is scripted
 
@@ -57,41 +109,41 @@ demos. Listed on the hub like the other main demos.
 | Memory caps | MEMORY.md 2,200 chars, USER.md 1,375 chars, frozen snapshot per session | `cli-config.yaml.example` L1005-1007; `tools/memory_tool_store.py` L618-644 |
 | Tool output caps | terminal 50,000 chars (keep first 40% / last 60%); read_file 100,000 chars | `tools/tool_output_limits.py` L13-15; `tools/file_tools.py` L52 |
 | Minimum window | 64,000 tokens | `model_metadata.py` L272; docs quickstart |
-| Window for `deepseek-v4-flash` | 1,000,000 tokens (DeepSeek native endpoint) | `model_metadata.py` L314 |
+| Window for `deepseek-v4-flash` | 1,000,000 tokens (DeepSeek native endpoint); lookups are longest-key-first substring matches, so `kit.deepseek-v4-flash` resolves to it | `model_metadata.py` L288, L314, L559 |
 | `model.context_length` config cap | caps the detected window | `cli-config.yaml.example` L135-145 |
 | Status-bar model label | model id, reverse-aliased, split on `/`, truncated at 26 chars | `hermes_cli/cli_status_bar_mixin.py` L196-207 |
-| Session tools | `read_file`, `search_files`, `patch`, `terminal`, `skill_view`, `memory`, `delegate_task`, `web_search`, `web_extract` are registered Hermes tools | `tools/file_tools.py` L1395-1420, `terminal_tool.py` L1631, `skills_tool.py` L746, `memory_tool.py` L477, `delegate_tool.py` L800, `web_tools.py` L560-566 |
+| Session tools | `read_file`, `write_file`, `patch`, `terminal`, `skill_view`, `memory`, `delegate_task`, `web_search`, `web_extract` are registered Hermes tools; `web_extract` and `read_file` return at most 100,000 chars | `tools/file_tools.py` L1395-1420, `terminal_tool.py` L1631, `skills_tool.py` L746, `memory_tool.py` L477, `delegate_tool.py` L800, `web_tools.py` L560-572 |
+| Skill slash command | `/skill-name …` becomes a user message carrying the full SKILL.md plus an `[IMPORTANT: The user has invoked the "…" skill …]` note | `agent/skill_commands.py` L761-768 |
+| Default SOUL.md | seeded into the Hermes home on first run | `hermes_cli/config_home.py` L56-68, `default_soul.py` |
+| Memory block rendering | `═`×46, title (`MEMORY (your personal notes)` / `USER PROFILE (who the user is)`), usage %, `═`×46, entries joined by `§` | `tools/memory_tool_store.py` L22-25, L638-644 |
+| Coding posture | off in `$HOME` (not a code workspace) | `agent/coding_context.py` L262-277 |
 | Token estimator | 4 chars per token (ASCII) | `model_metadata.py` L2374 |
 | `/context` grid and categories | 20x5 cells; system_prompt, tool_definitions, rules, skills, mcp, subagent_definitions, memory, conversation | `agent/context_breakdown.py` L36-56 |
 | Status-bar bands | green < 50%, yellow 50-80%, orange > 80%, red >= 95% | `hermes_cli/cli_status_bar_mixin.py` L49-52; docs CLI guide |
 
 **Measured statically from the same commit** (text constants and tool schemas,
-`ceil(chars / 4)`, no Hermes code executed):
+`ceil(chars / 4)`, no Hermes code executed): every token count in the prefix
+table above except the ones marked sample or estimate, plus the `arxiv`
+SKILL.md (10,061 chars = 2,516 tokens) and the `llm-wiki` SKILL.md (20,121
+chars = 5,031 tokens).
 
-| Prefix part | Tokens | Note |
-|---|---|---|
-| System prompt text | 2,300 | identity 166, help pointer 150, task + parallel-tool guidance 348, memory/session-search/skills guidance 417, steering note 193, coding brief 658, CLI platform hint 218, plus 150 assumed for the workspace/timestamp/profile lines (not measured) |
-| Tool schemas | 14,636 | 37 of the 51 core CLI tools resolved; the 14 kanban tools (dispatcher workers only) were not. Hermes's own comment: "50+ tools ≈ 20-30K tokens" |
-| AGENTS.md example | 2,988 | the Hermes repo's own `AGENTS.md` (11,952 chars) |
-| Skills index, 58 bundled skills | 1,444 | full `## Skills` block |
-| Memory snapshot | 570 | assumed fill: 1,320 / 2,200 chars of MEMORY.md and 820 / 1,375 of USER.md |
-| python-debugpy skill body | 3,746 | 14,984 chars, loaded by `skill_view` in the session |
+**Sample or estimated:** the MEMORY.md and USER.md contents (517 and 364
+chars), the runtime-environment lines (353 chars for a Linux VM), the two MCP
+servers' schemas (about 130 tokens per tool).
 
-**Scripted:** the coding session (35 messages: user, Hermes tool calls, tool
-results, a skill load, a memory write, a sub-agent, a PR) and its token counts;
-the sub-agent's 41,000-token side window; the summary wording (its structure is
-Hermes's template). The grid fills with the scripted numbers; the rules that
-shrink it are the real ones above.
+**Scripted:** the day's messages and their token counts, the subagents'
+30K-token side windows, the summary wording (its structure is Hermes's
+template).
 
-Behaviour of the scripted session under those rules, from a headless run of the
-page's simulation core:
+Behaviour of the scripted day under the real rules, from a headless run of the
+page's simulation core (prefix 20,169 tokens; conversation 97,886 tokens):
 
 | Window | Trigger | Compactions | When |
 |---|---|---|---|
-| 64,000 | 54,400 (85% cap) | 5 | steps 14, 19, 27, 29, 31 |
-| 128,000 | 96,000 (75%) | 1 | step 19 |
-| 200,000 | 150,000 (75%) | 1 | step 34 |
-| 1,000,000 | 500,000 (50%) | 0 | never; the page offers `/compress` at the end |
+| 64,000 | 54,400 (85% cap) | 5 | steps 16, 22, 24 (ineffective: the 5,100-token skill message cannot be pruned), 26, 34 |
+| 128,000 | 96,000 (75%) | 1 | step 24 |
+| 200,000 | 150,000 (75%) | 0 | never; `/compress` offered at the end |
+| 1,000,000 | 500,000 (50%) | 0 | never; `/compress` offered at the end |
 
 ## Sources
 
