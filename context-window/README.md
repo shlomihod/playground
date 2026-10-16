@@ -59,8 +59,8 @@ The sample AGENTS.md used for the count:
 # AGENTS.md — my research assistant
 
 ## Who I am
-PhD student in a privacy research group. Topic: differential privacy in practice
-(epsilon choice, real-world releases, adversary models). Supervisor meeting Tuesdays 10:00.
+Researcher in a privacy group. Topic: differential privacy in practice
+(epsilon choice, real-world releases, adversary models). Group meeting Tuesdays 10:00.
 
 ## How to answer
 - Short bullets. German or English, whichever I use.
@@ -68,9 +68,9 @@ PhD student in a privacy research group. Topic: differential privacy in practice
 - Quote exact numbers from sources; say when a figure is missing.
 
 ## Where things are
-- Papers: ~/phd/reading (PDFs + pdftotext output)
-- Notes: ~/phd/notes (Obsidian vault; one file per paper)
-- Thesis: ~/phd/thesis (LaTeX; do not edit .tex files without asking)
+- Papers: ~/research/reading (PDFs + pdftotext output)
+- Notes: ~/research/notes (Obsidian vault; one file per paper)
+- Drafts: ~/research/drafts (LaTeX; do not edit .tex files without asking)
 
 ## Rules
 - Personal data of colleagues stays on the local model. Never send it to cloud tools.
@@ -102,7 +102,7 @@ PhD student in a privacy research group. Topic: differential privacy in practice
 
 Plain requests, no skills or MCP servers: introduce yourself (a memory write
 to USER.md), a web search with two page extracts, then the request that fills
-even a 1M window: "Summarize every paper in ~/phd/reading (60 PDFs): 3 bullets
+even a 1M window: "Summarize every paper in ~/research/reading (60 PDFs): 3 bullets
 each". Hermes converts the PDFs with one `terminal` call, then works in 12
 rounds of five parallel `read_file` calls (36K to 106K chars each, capped at
 100,000) and a short summaries turn, and finally writes one file. After that:

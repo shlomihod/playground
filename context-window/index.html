@@ -299,11 +299,11 @@ function readingBatch() {
   for (var r = 0; r < READING_FILES / READS_PER_ROUND; r++) {
     var first = r * READS_PER_ROUND + 1, last = first + READS_PER_ROUND - 1, pad = function (n) { return (n < 10 ? '0' : '') + n; };
     rows.push({ role: 'assistant', title: 'read_file × ' + READS_PER_ROUND + ' (p' + pad(first) + '–p' + pad(last) + ', parallel)', tokens: 120, tool: 'read_file', batch: true,
-      text: 'thinking: Independent reads, so issue them in one turn.\n\n' + Array.apply(null, Array(READS_PER_ROUND)).map(function (_, i) { return 'tool_call: read_file(path="~/phd/reading/p' + pad(first + i) + '.txt")'; }).join('\n') });
+      text: 'thinking: Independent reads, so issue them in one turn.\n\n' + Array.apply(null, Array(READS_PER_ROUND)).map(function (_, i) { return 'tool_call: read_file(path="~/research/reading/p' + pad(first + i) + '.txt")'; }).join('\n') });
     for (var i = 0; i < READS_PER_ROUND; i++) {
       var k = first + i, chars = readingChars(k), capped = chars > READ_FILE_MAX_CHARS, got = Math.min(chars, READ_FILE_MAX_CHARS);
       rows.push({ role: 'tool', title: 'read_file → p' + pad(k) + '.txt, ' + got.toLocaleString('en-US') + ' chars' + (capped ? ' [CAPPED]' : ''), tokens: Math.ceil(got / 4), tool: 'read_file', batch: true,
-        text: '[~/phd/reading/p' + pad(k) + '.txt — ' + chars.toLocaleString('en-US') + ' chars' + (capped ? '; read_file returns the first 100,000' : '') + ']\n\n' + (k % 3 === 0 ? 'Abstract. We study the choice of epsilon in …' : k % 3 === 1 ? 'Abstract. Differential privacy guarantees are often stated …' : 'Abstract. This report evaluates a deployed mechanism …') });
+        text: '[~/research/reading/p' + pad(k) + '.txt — ' + chars.toLocaleString('en-US') + ' chars' + (capped ? '; read_file returns the first 100,000' : '') + ']\n\n' + (k % 3 === 0 ? 'Abstract. We study the choice of epsilon in …' : k % 3 === 1 ? 'Abstract. Differential privacy guarantees are often stated …' : 'Abstract. This report evaluates a deployed mechanism …') });
     }
     rows.push({ role: 'assistant', title: 'Summaries for p' + pad(first) + '–p' + pad(last), tokens: 600, batch: true,
       text: 'p' + pad(first) + ' — • … • … • …\np' + pad(first + 1) + ' — • … • … • …\n…' });
@@ -311,8 +311,8 @@ function readingBatch() {
   return rows;
 }
 var SCRIPT = [
-  { role: 'user', title: 'Hi, I’m a PhD student…', tokens: 40, text: 'Hi! I’m a PhD student working on differential privacy in practice. I prefer short bullet answers.' },
-  { role: 'assistant', title: 'memory(add → USER.md)', tokens: 80, tool: 'memory', text: 'tool_call: memory(action="add", target="user", content="PhD student working on differential privacy in practice. Prefers short bullet answers.")' },
+  { role: 'user', title: 'Hi, I’m a researcher…', tokens: 40, text: 'Hi! I’m a researcher working on differential privacy in practice. I prefer short bullet answers.' },
+  { role: 'assistant', title: 'memory(add → USER.md)', tokens: 80, tool: 'memory', text: 'tool_call: memory(action="add", target="user", content="Researcher working on differential privacy in practice. Prefers short bullet answers.")' },
   { role: 'tool', title: 'memory → saved (USER.md 514/1,375 chars)', tokens: 30, tool: 'memory', kind: 'memory', memChars: 150, text: 'Write saved. USER.md at 514/1,375 chars. This update is complete — do not repeat it.\n\n[On disk now. NOT in the system prompt: USER.md was rendered once at session start.]' },
   { role: 'assistant', title: 'Noted. What do you need?', tokens: 30, text: '• Noted: DP in practice, short bullets.\n• What do you need?' },
   { role: 'user', title: 'What’s new on DP this week? Search the web.', tokens: 30, text: 'What’s new on differential privacy this week? Search the web.' },
@@ -321,13 +321,13 @@ var SCRIPT = [
   { role: 'assistant', title: 'web_extract (2 pages)', tokens: 60, tool: 'web_extract', text: 'tool_call: web_extract(urls=["https://csrc.nist.gov/pubs/sp/800/226/final", "https://arxiv.org/list/cs.CR/new"])' },
   { role: 'tool', title: 'web_extract → 2 pages, 88,000 chars', tokens: 22000, tool: 'web_extract', text: '[2 pages of extracted text — 88,000 chars. web_extract returns at most 100,000 chars per call.]\n\nNIST Special Publication 800-226 … Guidelines for Evaluating Differential Privacy Guarantees …\n\narXiv cs.CR new submissions … ' },
   { role: 'assistant', title: 'This week in DP (5 bullets)', tokens: 350, text: '• NIST SP 800-226 is final: a checklist for evaluating DP claims (epsilon, unit of privacy, composition).\n• Google describes DP in Gemini data pipelines …\n• 14 new cs.CR papers; 3 relevant to practice: …\n• …\n• Links: csrc.nist.gov/…, arxiv.org/abs/…' },
-  { role: 'user', title: 'Summarize every paper in my reading folder', tokens: 45, text: 'Summarize every paper in ~/phd/reading (60 PDFs): 3 bullets each, then save all of it to ~/phd/summaries.md.' },
-  { role: 'assistant', title: 'terminal: pdftotext for 60 PDFs', tokens: 90, tool: 'terminal', text: 'tool_call: terminal(command="cd ~/phd/reading && for f in *.pdf; do pdftotext \"$f\"; done && wc -c *.txt | sort -n")' },
+  { role: 'user', title: 'Summarize every paper in my reading folder', tokens: 45, text: 'Summarize every paper in ~/research/reading (60 PDFs): 3 bullets each, then save all of it to ~/research/summaries.md.' },
+  { role: 'assistant', title: 'terminal: pdftotext for 60 PDFs', tokens: 90, tool: 'terminal', text: 'tool_call: terminal(command="cd ~/research/reading && for f in *.pdf; do pdftotext \"$f\"; done && wc -c *.txt | sort -n")' },
   { role: 'tool', title: 'terminal → 60 files converted', tokens: 600, tool: 'terminal', text: '  36,412 p01.txt\n  41,088 p02.txt\n …\n 184,220 p60.txt\n4,061,540 total' }
 ].concat(readingBatch()).concat([
-  { role: 'assistant', title: 'write_file ~/phd/summaries.md', tokens: 90, tool: 'write_file', text: 'tool_call: write_file(path="~/phd/summaries.md", content=…)  # 60 × 3 bullets' },
-  { role: 'tool', title: 'write_file → ok', tokens: 40, tool: 'write_file', text: 'Wrote ~/phd/summaries.md (27,940 chars)' },
-  { role: 'assistant', title: 'Done: 60 summaries saved', tokens: 120, text: '• 60 papers summarized, 3 bullets each\n• Saved to ~/phd/summaries.md\n• 4 PDFs were longer than 100,000 chars; only their first 100,000 were read' },
+  { role: 'assistant', title: 'write_file ~/research/summaries.md', tokens: 90, tool: 'write_file', text: 'tool_call: write_file(path="~/research/summaries.md", content=…)  # 60 × 3 bullets' },
+  { role: 'tool', title: 'write_file → ok', tokens: 40, tool: 'write_file', text: 'Wrote ~/research/summaries.md (27,940 chars)' },
+  { role: 'assistant', title: 'Done: 60 summaries saved', tokens: 120, text: '• 60 papers summarized, 3 bullets each\n• Saved to ~/research/summaries.md\n• 4 PDFs were longer than 100,000 chars; only their first 100,000 were read' },
   { role: 'user', title: 'Plan my trip to PETS 2027 with 3 subagents', tokens: 55, text: 'Plan my trip to PETS 2027 in Lisbon: one subagent finds trains, one hotels near the venue, one the talks I should attend. Then merge it into one plan.' },
   { role: 'assistant', title: 'delegate_task × 3 (parallel)', tokens: 150, tool: 'delegate_task', text: 'tool_call: delegate_task(goal="Trains Karlsruhe → Lisbon around PETS 2027 dates; ≤ 300 words", toolsets=["web"])\ntool_call: delegate_task(goal="Hotels within 1 km of the PETS 2027 venue; ≤ 300 words", toolsets=["web"])\ntool_call: delegate_task(goal="PETS 2027 talks on DP in practice; ≤ 300 words", toolsets=["web"])' },
   { role: 'tool', title: 'delegate_task → trains report (subagent read 31K)', tokens: 520, tool: 'delegate_task', kind: 'subagent', text: '[Subagent report — 520 tokens]\nKarlsruhe → Paris (TGV) → Hendaye → Lisbon: 2 days by rail; or fly FRA–LIS 3 h …\n\n[The subagent read about 31,000 tokens of timetables and pages in ITS OWN window. Only this report entered yours.]' },
@@ -734,7 +734,7 @@ function renderDetail(segs) {
   html += '<div class="box take"><div class="k">Key point</div>' + takeaway() + '</div>';
   detailEl.innerHTML = html;
 }
-var SUMMARY_PREVIEW = '[CONTEXT COMPACTION — REFERENCE ONLY]\nThe following is an automated summary of earlier conversation that was compressed to save context space. Treat it as background reference only.\n\n## Task\nPersonal-assistant day: DP news this week; summarizing the 60 PDFs in ~/phd/reading, 3 bullets each, to ~/phd/summaries.md (in progress) …\n## Key Decisions\n…\n## Anchor Index (mechanically extracted, exact)\n~/phd/reading/p01.txt … p25.txt · https://csrc.nist.gov/pubs/sp/800/226/final …\n## User Messages (verbatim, newest first)\n…\n## Context Recovery\nFull transcript remains searchable via session_search(…)\n--- END OF CONTEXT SUMMARY ---';
+var SUMMARY_PREVIEW = '[CONTEXT COMPACTION — REFERENCE ONLY]\nThe following is an automated summary of earlier conversation that was compressed to save context space. Treat it as background reference only.\n\n## Task\nPersonal-assistant day: DP news this week; summarizing the 60 PDFs in ~/research/reading, 3 bullets each, to ~/research/summaries.md (in progress) …\n## Key Decisions\n…\n## Anchor Index (mechanically extracted, exact)\n~/research/reading/p01.txt … p25.txt · https://csrc.nist.gov/pubs/sp/800/226/final …\n## User Messages (verbatim, newest first)\n…\n## Context Recovery\nFull transcript remains searchable via session_search(…)\n--- END OF CONTEXT SUMMARY ---';
 
 /* ---------- readout + controls ---------- */
 var roBig = document.getElementById('roBig'), roSub = document.getElementById('roSub'), statusEl = document.getElementById('status');
