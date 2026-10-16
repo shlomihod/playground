@@ -36,7 +36,7 @@ order:
 | stable | Mid-turn steering note | 193 | `STEER_CHANNEL_NOTE` |
 | stable | Tool-use enforcement | 206 | `TOOL_USE_ENFORCEMENT_GUIDANCE`; gated on `TOOL_USE_ENFORCEMENT_MODELS`, which includes `deepseek` (`prompt_builder.py` L365) |
 | stable | Execution guidance | 988 | `OPENAI_MODEL_EXECUTION_GUIDANCE`; gated on `EXECUTION_GUIDANCE_MODELS`, which includes `deepseek` (L379-382) |
-| context | AGENTS.md | 222 | sample `~/AGENTS.md` (872 chars, rendered as `## AGENTS.md` + body); one project-context type loads, first found: `.hermes.md` → `AGENTS.md` chain → `CLAUDE.md` → `.cursorrules` (`prompt_builder.py` L1866-1867, `_context_section` L1714-1717) |
+| context | AGENTS.md | 199 | sample `~/AGENTS.md` (781 chars, rendered as `## AGENTS.md` + body); one project-context type loads, first found: `.hermes.md` → `AGENTS.md` chain → `CLAUDE.md` → `.cursorrules` (`prompt_builder.py` L1866-1867, `_context_section` L1714-1717) |
 | context | Platform hint (CLI) | 218 | `PLATFORM_HINTS["cli"]` |
 | volatile | Skills index | 1,444 | 58 bundled skills, names + descriptions |
 | volatile | MEMORY.md | 162 | header 129 chars + sample content 517 chars (cap 2,200) |
@@ -46,7 +46,6 @@ order:
 | volatile | Runtime environment | 89 | `build_environment_hints`, local Linux host (sample) |
 | volatile | Compaction note | 93 | `_COMPRESSION_NOTE`, only after the first compaction |
 | tools | 37 core tools in 10 toolset rows | 14,636 | `toolsets.py` `_HERMES_CORE_TOOLS`, schemas measured from the registry; the 14 kanban tools were not resolved |
-| mcp | calendar (3 tools), tasks (4 tools) | 390 + 520 | estimates, about 130 tokens per tool; names follow `mcp__server__tool` (`tools/mcp_tool_schema.py` L159-175) |
 
 No coding brief and no workspace snapshot: a home directory is not a code
 workspace, and `coding_context.py` skips `$HOME` when looking for project
@@ -69,18 +68,14 @@ PhD student at KIT, SECUSO group. Topic: differential privacy in practice
 - Quote exact numbers from sources; say when a figure is missing.
 
 ## Where things are
-- Papers: ~/phd/papers (PDFs + pdftotext output)
-- Wiki: ~/wiki (llm-wiki skill; ingest new papers there before summarizing)
+- Papers: ~/phd/reading (PDFs + pdftotext output)
+- Notes: ~/phd/notes (Obsidian vault; one file per paper)
 - Thesis: ~/phd/thesis (LaTeX; do not edit .tex files without asking)
 
 ## Rules
-- Calendar MCP is read-only; the tasks MCP may create and complete tasks.
 - Personal data of colleagues stays on KIT models. Never send it to cloud tools.
 - Student data, study data and papers under review: never in any tool.
-``` A profile (`hermes profile create coder`) is a separate
-Hermes home under `~/.hermes/profiles/<name>/` with its own `config.yaml`,
-`SOUL.md`, `memories/`, `skills/`, cron and sessions; it decides which of the
-rows above load, and adds only the one-line profile line to the window.
+```
 
 ## How to drive it
 
@@ -97,29 +92,29 @@ rows above load, and adds only the one-line profile line to the window.
   `deepseek-v4-flash` (longest-key substring match, so `kit.deepseek-v4-flash`
   resolves the same way unless the endpoint reports a window); the smaller
   values stand for the `model.context_length` cap in Hermes's config. The
-  60-paper ingest triggers auto-compaction at every window: twice at 1M,
-  eleven times at 200K, fifteen at 128K, twenty-five at 64K.
-- Deep links: `?window=128000&step=37` (step is 1-based; `step=0` shows the
+  60-paper summary triggers auto-compaction at every window: twice at 1M,
+  eleven times at 200K, fourteen at 128K; at 64K the breaker trips.
+- Deep links: `?window=128000&step=27` (step is 1-based; `step=0` shows the
   loaded prefix).
 
 ## The scripted day
 
-The requests are the ones the workshop's Part 1 demo uses, in the order the
-workshop builds them: introduce yourself (memory write to USER.md), web
-search, "my latest papers on arXiv" (the bundled `arxiv` skill via
-`skill_view`, then its script in `terminal`), then the request that fills even
-a 1M window: `/llm-wiki ingest every PDF in ~/phd/reading (60 files)`. The
-slash command pastes the 20,121-char SKILL.md into the user message; Hermes
-converts the PDFs with one `terminal` call, then works in 12 rounds of five
-parallel `read_file` calls (36K to 106K chars each, capped at 100,000) and
-five `write_file` calls for the wiki pages. After that: calendar and tasks
-through two MCP servers, a three-subagent trip plan (`delegate_task`), and a
-task plus a second memory write. 180 messages.
+Plain requests, no skills or MCP servers: introduce yourself (a memory write
+to USER.md), a web search with two page extracts, then the request that fills
+even a 1M window: "Summarize every paper in ~/phd/reading (60 PDFs): 3 bullets
+each". Hermes converts the PDFs with one `terminal` call, then works in 12
+rounds of five parallel `read_file` calls (36K to 106K chars each, capped at
+100,000) and a short summaries turn, and finally writes one file. After that:
+a three-subagent trip plan (`delegate_task`) and a second memory write. 110
+messages.
 
 Tool results are appended as they land, so after a round of five reads the
 prompt can be past the trigger, or past the window, until the next model
 call; Hermes compacts in the preflight of that call. The page shows this
-transient state with its own key point rather than hiding it.
+transient state with its own key point rather than hiding it. At 64K a round
+is bigger than the window, two compactions in a row stay over the trigger,
+and Hermes's anti-thrash breaker trips: the page ends the session there and
+says why.
 
 ## What is real and what is scripted
 
@@ -148,8 +143,7 @@ transient state with its own key point rather than hiding it.
 | Window for `deepseek-v4-flash` | 1,000,000 tokens (DeepSeek native endpoint); lookups are longest-key-first substring matches, so `kit.deepseek-v4-flash` resolves to it | `model_metadata.py` L288, L314, L559 |
 | `model.context_length` config cap | caps the detected window | `cli-config.yaml.example` L135-145 |
 | Status-bar model label | model id, reverse-aliased, split on `/`, truncated at 26 chars | `hermes_cli/cli_status_bar_mixin.py` L196-207 |
-| Session tools | `read_file`, `write_file`, `patch`, `terminal`, `skill_view`, `memory`, `delegate_task`, `web_search`, `web_extract` are registered Hermes tools; `web_extract` and `read_file` return at most 100,000 chars | `tools/file_tools.py` L1395-1420, `terminal_tool.py` L1631, `skills_tool.py` L746, `memory_tool.py` L477, `delegate_tool.py` L800, `web_tools.py` L560-572 |
-| Skill slash command | `/skill-name …` becomes a user message carrying the full SKILL.md plus an `[IMPORTANT: The user has invoked the "…" skill …]` note | `agent/skill_commands.py` L761-768 |
+| Session tools | `read_file`, `write_file`, `terminal`, `memory`, `delegate_task`, `web_search`, `web_extract` are registered Hermes tools; `web_extract` and `read_file` return at most 100,000 chars | `tools/file_tools.py` L1395-1420, `terminal_tool.py` L1631, `skills_tool.py` L746, `memory_tool.py` L477, `delegate_tool.py` L800, `web_tools.py` L560-572 |
 | Default SOUL.md | seeded into the Hermes home on first run | `hermes_cli/config_home.py` L56-68, `default_soul.py` |
 | Memory block rendering | `═`×46, title (`MEMORY (your personal notes)` / `USER PROFILE (who the user is)`), usage %, `═`×46, entries joined by `§` | `tools/memory_tool_store.py` L22-25, L638-644 |
 | Coding posture | off in `$HOME` (not a code workspace) | `agent/coding_context.py` L262-277 |
@@ -159,28 +153,25 @@ transient state with its own key point rather than hiding it.
 
 **Measured statically from the same commit** (text constants and tool schemas,
 `ceil(chars / 4)`, no Hermes code executed): every token count in the prefix
-table above except the ones marked sample or estimate, plus the `arxiv`
-SKILL.md (10,061 chars = 2,516 tokens) and the `llm-wiki` SKILL.md (20,121
-chars = 5,031 tokens).
+table above except the ones marked sample.
 
-**Sample or estimated:** the AGENTS.md, MEMORY.md and USER.md contents (872,
-517 and 364 chars), the runtime-environment lines (353 chars for a Linux VM), the two MCP
-servers' schemas (about 130 tokens per tool).
+**Sample:** the AGENTS.md, MEMORY.md and USER.md contents (781, 517 and 364
+chars) and the runtime-environment lines (353 chars for a Linux VM).
 
 **Scripted:** the day's messages and their token counts, the subagents'
 30K-token side windows, the summary wording (its structure is Hermes's
 template).
 
 Behaviour of the scripted day under the real rules, from a headless run of the
-page's simulation core (prefix 20,391 tokens; conversation 1,117,753 tokens,
-of which the ingest is about 1,070,000):
+page's simulation core (prefix 19,589 tokens; conversation 1,098,222 tokens,
+of which the reads are about 1,030,000):
 
-| Window | Trigger | Compactions | First one |
+| Window | Trigger | Compactions | Notes |
 |---|---|---|---|
-| 64,000 | 54,400 (85% cap) | 25 | step 16 |
-| 128,000 | 96,000 (75%) | 15 | step 26 |
-| 200,000 | 150,000 (75%) | 11 | step 38 |
-| 1,000,000 | 500,000 (50%) | 2 | step 86 (553K → 54K), then step 146 |
+| 64,000 | 54,400 (85% cap) | 2, then the breaker trips | a round of five reads does not fit |
+| 128,000 | 96,000 (75%) | 14 | first at step 20 |
+| 200,000 | 150,000 (75%) | 11 | first at step 27 |
+| 1,000,000 | 500,000 (50%) | 2 | step 55 (536K → 49K) and once more near the end |
 
 ## Sources
 

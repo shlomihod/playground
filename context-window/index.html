@@ -212,8 +212,8 @@
 <details class="src">
   <summary>What is real here, and sources</summary>
   <ul>
-    <li><b>Real:</b> the order and content of the system prompt (its stable, context and volatile parts: SOUL.md first, memory and the profile line last) and the size of each part, measured from the <a href="https://github.com/NousResearch/hermes-agent" target="_blank" rel="noopener">hermes-agent</a> source at commit <code>7520c4e8</code> (2026-10-15): identity and guidance text, the two DeepSeek-gated blocks, the index of 58 bundled skills, 37 of the 51 core tool schemas, the <code>arxiv</code> and <code>llm-wiki</code> skill bodies; the compaction rules (threshold 50% floored to 75% under 512K, 64K minimum, protected head and tail, tool-output stubs, skill pruning, summary budget, memory re-read when the system prompt is rebuilt); the grid idea, status bar and colour bands of Hermes&rsquo;s own <code>/context</code> and CLI (Hermes draws 100 cells, one per percent; this page draws 500 so the small parts show); the model: Hermes&rsquo;s model table gives <code>deepseek-v4-flash</code> a 1,000,000-token window (the KIT endpoint may report a smaller one; pick what your status bar shows), and the smaller windows stand for the <code>model.context_length</code> config cap. Tokens are Hermes&rsquo;s own estimate: 4 characters &asymp; 1 token. The tools in the session are Hermes&rsquo;s registered tools; MCP tool names follow its <code>mcp__server__tool</code> scheme.</li>
-    <li><b>Estimated or sample:</b> the two MCP servers&rsquo; schema sizes, the AGENTS.md, MEMORY.md and USER.md contents, the runtime-environment lines.</li>
+    <li><b>Real:</b> the order and content of the system prompt (its stable, context and volatile parts: SOUL.md first, memory and the profile line last) and the size of each part, measured from the <a href="https://github.com/NousResearch/hermes-agent" target="_blank" rel="noopener">hermes-agent</a> source at commit <code>7520c4e8</code> (2026-10-15): identity and guidance text, the two DeepSeek-gated blocks, the index of 58 bundled skills, 37 of the 51 core tool schemas; the compaction rules (threshold 50% floored to 75% under 512K, 64K minimum, protected head and tail, tool-output stubs, skill pruning, summary budget, memory re-read when the system prompt is rebuilt); the grid idea, status bar and colour bands of Hermes&rsquo;s own <code>/context</code> and CLI (Hermes draws 100 cells, one per percent; this page draws 500 so the small parts show); the model: Hermes&rsquo;s model table gives <code>deepseek-v4-flash</code> a 1,000,000-token window (the KIT endpoint may report a smaller one; pick what your status bar shows), and the smaller windows stand for the <code>model.context_length</code> config cap. Tokens are Hermes&rsquo;s own estimate: 4 characters &asymp; 1 token. The tools in the session are Hermes&rsquo;s registered tools.</li>
+    <li><b>Sample:</b> the AGENTS.md, MEMORY.md and USER.md contents and the runtime-environment lines.</li>
     <li><b>Scripted:</b> the day itself. Its messages and token counts are illustrative, in the spirit of Anthropic&rsquo;s <a href="https://code.claude.com/docs/en/context-window" target="_blank" rel="noopener">Explore the context window</a> simulation for Claude Code, which inspired this page.</li>
     <li>Hermes docs: <a href="https://hermes-agent.nousresearch.com/docs/developer-guide/context-compression-and-caching" target="_blank" rel="noopener">Context Compression and Caching</a>, <a href="https://hermes-agent.nousresearch.com/docs/developer-guide/prompt-assembly" target="_blank" rel="noopener">Prompt Assembly</a>, <a href="https://hermes-agent.nousresearch.com/docs/user-guide/features/memory" target="_blank" rel="noopener">Persistent Memory</a>. Source file and line references are in this demo&rsquo;s README.</li>
   </ul>
@@ -272,14 +272,14 @@ var PREFIX_ROWS = [
   { id: 'exec', tier: 'stable', cat: 'system', label: 'Execution guidance (DeepSeek-class)', tokens: 988, path: 'prompt_builder.py OPENAI_MODEL_EXECUTION_GUIDANCE',
     desc: 'A second model-gated block (gpt, codex, grok, deepseek, kimi, qwen, glm, minimax, mistral, muse): execution discipline learned from agentic evals. Lines that mention tools not in this session are dropped. Switch the model to Claude and 1,194 tokens leave the prefix.', fate: 'Never compacted.' },
   // context tier
-  { id: 'ctx', tier: 'context', cat: 'rules', label: 'AGENTS.md (your standing instructions)', tokens: 222, est: true, path: '~/AGENTS.md (sample, 872 chars)',
-    desc: 'Project context files. Hermes loads ONE type from the working directory, first found: .hermes.md, then the AGENTS.md chain, then CLAUDE.md, then .cursorrules, capped at 6% of the window in characters. Here: a short AGENTS.md in your home directory (who you are, how to answer, where papers and the wiki live, what stays on KIT models). Hermes’s own comment calls an AGENTS.md in the home directory “global config”: it loads, but does not switch on the coding posture. Start Hermes inside a code project and the same file also brings the coding brief and a workspace snapshot.',
+  { id: 'ctx', tier: 'context', cat: 'rules', label: 'AGENTS.md (your standing instructions)', tokens: 199, est: true, path: '~/AGENTS.md (sample, 781 chars)',
+    desc: 'Project context files. Hermes loads ONE type from the working directory, first found: .hermes.md, then the AGENTS.md chain, then CLAUDE.md, then .cursorrules, capped at 6% of the window in characters. Here: a short AGENTS.md in your home directory (who you are, how to answer, where papers and notes live, what stays on KIT models). Hermes’s own comment calls an AGENTS.md in the home directory “global config”: it loads, but does not switch on the coding posture. Start Hermes inside a code project and the same file also brings the coding brief and a workspace snapshot.',
     fate: 'Re-read from disk at the prompt rebuild, so edits appear after a compaction or /new.' },
   { id: 'platform', tier: 'context', cat: 'system', label: 'Platform hint (CLI)', tokens: 218, path: 'prompt_builder.py PLATFORM_HINTS["cli"]',
     desc: '“You are in a plain terminal (CLI). Markdown does NOT render…”. The Telegram gateway sends a different hint; this is why the same agent formats answers differently per channel.', fate: 'Never compacted.' },
   // volatile tier
   { id: 'skills', tier: 'volatile', cat: 'skills', label: 'Skills index (58 bundled skills)', tokens: 1444, path: '~/.hermes/skills/ + bundled skills/',
-    desc: 'Only names and one-line descriptions, grouped by category (research: arxiv, llm-wiki, grounded-citations…). A skill you create with /learn adds one line here. A skill’s full SKILL.md enters the window only when Hermes calls skill_view or you type /skill-name.',
+    desc: 'Only names and one-line descriptions, grouped by category. A skill you create with /learn adds one line here. A skill’s full SKILL.md enters the window only when Hermes calls skill_view or you type /skill-name.',
     fate: 'Re-rendered at the prompt rebuild, so a skill learned mid-session shows up after the next compaction or /new.' },
   { id: 'memory_md', tier: 'volatile', cat: 'memory', label: 'MEMORY.md (agent’s notes)', path: '~/.hermes/memories/MEMORY.md',
     desc: 'The agent’s notes on your work and setup: conventions, quirks, finished work. Up to 2,200 characters (here 517), rendered under the header “MEMORY (your personal notes) [24%]”. A frozen snapshot of the file at session start.',
@@ -304,22 +304,19 @@ var PREFIX_ROWS = [
   { id: 'ts_terminal', tier: 'tools', cat: 'tools', label: 'terminal: terminal, process_manage', tokens: 1012, path: 'tools/terminal_tool.py', desc: 'Shell access on the local backend or inside Docker. Output is capped at 50,000 chars per call (first 40% + last 60% kept).', fate: 'Never compacted.' },
   { id: 'ts_file', tier: 'tools', cat: 'tools', label: 'file: read_file, write_file, patch, search_files', tokens: 1301, path: 'tools/file_tools.py', desc: 'File tools. read_file returns at most 100,000 chars per call.', fate: 'Never compacted.' },
   { id: 'ts_memory', tier: 'tools', cat: 'tools', label: 'memory', tokens: 780, path: 'tools/memory_tool.py', desc: 'One tool with add / replace / remove actions on MEMORY.md and USER.md. Its schema alone is bigger than both memory files.', fate: 'Never compacted.' },
-  { id: 'ts_delegate', tier: 'tools', cat: 'tools', label: 'delegate_task (subagents)', tokens: 130, path: 'tools/delegate_tool.py', desc: 'Spawns up to 10 subagents with fresh context windows (Part 6). Smallest schema, biggest context saver.', fate: 'Never compacted.' },
+  { id: 'ts_delegate', tier: 'tools', cat: 'tools', label: 'delegate_task (subagents)', tokens: 130, path: 'tools/delegate_tool.py', desc: 'Spawns up to 10 subagents with fresh context windows. Smallest schema, biggest context saver.', fate: 'Never compacted.' },
   { id: 'ts_cron', tier: 'tools', cat: 'tools', label: 'cronjob_manage', tokens: 1670, path: 'tools/cronjob_tool.py', desc: 'Create and manage scheduled jobs from chat (Part 9). The biggest single schema in the default set.', fate: 'Never compacted.' },
   { id: 'ts_media', tier: 'tools', cat: 'tools', label: 'vision_analyze, text_to_speech, image_generate', tokens: 659, path: 'tools/', desc: 'Vision and voice. Speech-to-text is not a model tool; the gateway transcribes voice notes before they reach the model.', fate: 'Never compacted.' },
   { id: 'ts_browser', tier: 'tools', cat: 'tools', label: 'browser (14 tools)', tokens: 3702, path: 'tools/browser_tool.py', desc: 'Headless browser: navigate, snapshot, click, type, scroll… Enabled by default in the CLI toolset even if you never use it. `hermes tools` lets you switch it off and these cells disappear.', fate: 'Never compacted.' },
   { id: 'ts_misc', tier: 'tools', cat: 'tools', label: 'skills (3), session_search, todo_list, clarify, execute_code', tokens: 2467, path: 'tools/', desc: 'skills_list / skill_view / skill_manage, search of past sessions, a todo list, a clarifying-question tool and a code sandbox.', fate: 'Never compacted.' },
-  { id: 'ts_ops', tier: 'tools', cat: 'tools', label: 'computer_use, manage_connections', tokens: 2489, path: 'tools/', desc: 'Desktop control and connector account status. Measured but rarely used in a terminal session.', fate: 'Never compacted.' },
-  // MCP servers (Part 8): their tools are advertised like any other, prefixed mcp__&lt;server&gt;__&lt;tool&gt;; /context counts them in a separate bucket
-  { id: 'mcp_cal', tier: 'mcp', cat: 'mcp', label: 'MCP calendar (3 read-only tools)', tokens: 390, est: true, path: 'hermes mcp add calendar …', desc: 'mcp__calendar__list_events, get_event, search_events. Size is an estimate (about 130 tokens per tool); the real number depends on the server you write.', fate: 'Never compacted.' },
-  { id: 'mcp_tasks', tier: 'mcp', cat: 'mcp', label: 'MCP tasks (4 tools)', tokens: 520, est: true, path: 'hermes mcp add tasks …', desc: 'mcp__tasks__list, create, update, complete. The tasks server can change things; the calendar cannot. Estimate.', fate: 'Never compacted.' }
+  { id: 'ts_ops', tier: 'tools', cat: 'tools', label: 'computer_use, manage_connections', tokens: 2489, path: 'tools/', desc: 'Desktop control and connector account status. Measured but rarely used in a terminal session.', fate: 'Never compacted.' }
 ];
 var MEMORY_HEADER_CHARS = 129, USER_HEADER_CHARS = 131;      // "═"×46 + title + usage + "═"×46 (memory_tool_store.py _render_block)
 var MEMORY_MD_CHARS = 517, USER_MD_CHARS = 364;               // sample files for this scenario (caps: 2,200 / 1,375)
 var COMPRESSION_NOTE_TOKENS = 93;                             // _COMPRESSION_NOTE, context_compressor.py L5352 (370 chars)
 
 // The scripted session: a personal assistant in the terminal. Tokens are illustrative; the tool caps are real.
-var READING_FILES = 60, READS_PER_ROUND = 5, READ_FILE_MAX_CHARS = 100000;
+var READING_FILES = 60, READS_PER_ROUND = 5, READ_FILE_MAX_CHARS = 100000;   // 12 rounds of 5 parallel reads, then 3 bullets per paper
 function readingChars(k) { return 36000 + ((k * 7919) % 70000); }          // 36K–106K chars per pdftotext file, deterministic
 function readingBatch() {
   var rows = [];
@@ -332,9 +329,8 @@ function readingBatch() {
       rows.push({ role: 'tool', title: 'read_file → p' + pad(k) + '.txt, ' + got.toLocaleString('en-US') + ' chars' + (capped ? ' [CAPPED]' : ''), tokens: Math.ceil(got / 4), tool: 'read_file', batch: true,
         text: '[~/phd/reading/p' + pad(k) + '.txt — ' + chars.toLocaleString('en-US') + ' chars' + (capped ? '; read_file returns the first 100,000' : '') + ']\n\n' + (k % 3 === 0 ? 'Abstract. We study the choice of epsilon in …' : k % 3 === 1 ? 'Abstract. Differential privacy guarantees are often stated …' : 'Abstract. This report evaluates a deployed mechanism …') });
     }
-    rows.push({ role: 'assistant', title: 'write_file × ' + READS_PER_ROUND + ' wiki pages', tokens: 400, tool: 'write_file', batch: true,
-      text: Array.apply(null, Array(READS_PER_ROUND)).map(function (_, i) { return 'tool_call: write_file(path="~/wiki/sources/p' + pad(first + i) + '.md", content=…)'; }).join('\n') });
-    for (var j = 0; j < READS_PER_ROUND; j++) rows.push({ role: 'tool', title: 'write_file → sources/p' + pad(first + j) + '.md', tokens: 40, tool: 'write_file', batch: true, text: 'Wrote ~/wiki/sources/p' + pad(first + j) + '.md (' + (1800 + ((first + j) * 131) % 900) + ' chars)' });
+    rows.push({ role: 'assistant', title: 'Summaries for p' + pad(first) + '–p' + pad(last), tokens: 600, batch: true,
+      text: 'p' + pad(first) + ' — • … • … • …\np' + pad(first + 1) + ' — • … • … • …\n…' });
   }
   return rows;
 }
@@ -349,33 +345,23 @@ var SCRIPT = [
   { role: 'assistant', title: 'web_extract (2 pages)', tokens: 60, tool: 'web_extract', text: 'tool_call: web_extract(urls=["https://csrc.nist.gov/pubs/sp/800/226/final", "https://arxiv.org/list/cs.CR/new"])' },
   { role: 'tool', title: 'web_extract → 2 pages, 88,000 chars', tokens: 22000, tool: 'web_extract', text: '[2 pages of extracted text — 88,000 chars. web_extract returns at most 100,000 chars per call.]\n\nNIST Special Publication 800-226 … Guidelines for Evaluating Differential Privacy Guarantees …\n\narXiv cs.CR new submissions … ' },
   { role: 'assistant', title: 'This week in DP (5 bullets)', tokens: 350, text: '• NIST SP 800-226 is final: a checklist for evaluating DP claims (epsilon, unit of privacy, composition).\n• Google describes DP in Gemini data pipelines …\n• 14 new cs.CR papers; 3 relevant to practice: …\n• …\n• Links: csrc.nist.gov/…, arxiv.org/abs/…' },
-  { role: 'user', title: 'What are my latest papers on arXiv?', tokens: 25, text: 'What are my latest papers on arXiv?' },
-  { role: 'assistant', title: 'skill_view("arxiv")', tokens: 40, tool: 'skill_view', text: 'thinking: There is a bundled arxiv skill in the index.\n\ntool_call: skill_view(name="arxiv")' },
-  { role: 'tool', title: 'skill_view → arxiv SKILL.md (10,061 chars)', tokens: 2516, tool: 'skill_view', kind: 'skill', text: '# arxiv\nSearch arXiv papers by keyword, author, category, or ID.\n\n[The bundled skill body: 10,061 chars, with its scripts/ usage. Loaded on demand; stays in the window for the rest of the session unless compaction prunes it.]' },
-  { role: 'assistant', title: 'terminal: arxiv_search.py --author', tokens: 90, tool: 'terminal', text: 'tool_call: terminal(command="python3 ~/.hermes/skills/research/arxiv/scripts/arxiv_search.py --author \'Shlomi Hod\' --max 12 --sort submitted")' },
-  { role: 'tool', title: 'terminal → 12 results, 36,000 chars', tokens: 9000, tool: 'terminal', text: '[arXiv API Atom feed, 36,000 chars]\n\n<entry><id>http://arxiv.org/abs/2405.00267v3</id><title>Differentially Private Release of Israel’s National Registry of Live Births</title> …\n<entry><id>http://arxiv.org/abs/2405.01716v2</id><title>ATTAXONOMY: Unpacking Differential Privacy Guarantees Against Practical Adversaries</title> …' },
-  { role: 'assistant', title: 'Your 12 latest papers', tokens: 220, text: '• 2405.00267 — DP release of Israel’s live-births registry (v3)\n• 2405.01716 — ATTAXONOMY (v2)\n• …' },
-  { role: 'user', title: '/llm-wiki ingest my whole reading folder', tokens: 5100, kind: 'skillcmd', text: '/llm-wiki ingest every PDF in ~/phd/reading (60 files) into my wiki\n\n[IMPORTANT: The user has invoked the "llm-wiki" skill, indicating they want you to follow its instructions. The full skill content is loaded below.]\n\n# llm-wiki\n[SKILL.md — 20,121 chars. A skill slash command puts the whole skill body INSIDE your user message.]' },
+  { role: 'user', title: 'Summarize every paper in my reading folder', tokens: 45, text: 'Summarize every paper in ~/phd/reading (60 PDFs): 3 bullets each, then save all of it to ~/phd/summaries.md.' },
   { role: 'assistant', title: 'terminal: pdftotext for 60 PDFs', tokens: 90, tool: 'terminal', text: 'tool_call: terminal(command="cd ~/phd/reading && for f in *.pdf; do pdftotext \"$f\"; done && wc -c *.txt | sort -n")' },
   { role: 'tool', title: 'terminal → 60 files converted', tokens: 600, tool: 'terminal', text: '  36,412 p01.txt\n  41,088 p02.txt\n …\n 184,220 p60.txt\n4,061,540 total' }
 ].concat(readingBatch()).concat([
-  { role: 'assistant', title: 'Ingested 60 papers; wiki index rebuilt', tokens: 250, text: '• 60 source pages under ~/wiki/sources/\n• 14 concept pages updated (epsilon, unit of privacy, composition, …)\n• index.md rebuilt; 9 contradictions flagged in log.md' },
-  { role: 'user', title: 'Meetings today? Tasks due?', tokens: 30, text: 'What meetings do I have today, and which tasks are due?' },
-  { role: 'assistant', title: 'mcp__calendar__list_events + mcp__tasks__list', tokens: 120, tool: 'mcp', text: 'tool_call: mcp__calendar__list_events(date="2026-10-16")\ntool_call: mcp__tasks__list(filter="due:today")\n\n[two independent calls, issued in parallel]' },
-  { role: 'tool', title: 'mcp__calendar__list_events → 4 events', tokens: 1100, tool: 'mcp__calendar__list_events', text: '10:00–11:00 Supervisor meeting (Geb. 50.34, R 252)\n12:00–13:00 Lunch with the DP reading group\n14:00–15:30 Seminar: Privacy in ML\n16:00–16:30 Call: PETS 2027 program committee' },
-  { role: 'tool', title: 'mcp__tasks__list → 7 tasks', tokens: 900, tool: 'mcp__tasks__list', text: '[ ] Camera-ready for ATTAXONOMY — due today\n[ ] Review #212 for PETS — due today\n[ ] Reply to SCC about CalDAV — due today\n… (7 tasks)' },
-  { role: 'assistant', title: 'Today: 4 meetings, 3 tasks due', tokens: 260, text: '• 10:00 supervisor, 12:00 reading group, 14:00 seminar, 16:00 PC call\n• Due today: camera-ready, review #212, reply to SCC' },
+  { role: 'assistant', title: 'write_file ~/phd/summaries.md', tokens: 90, tool: 'write_file', text: 'tool_call: write_file(path="~/phd/summaries.md", content=…)  # 60 × 3 bullets' },
+  { role: 'tool', title: 'write_file → ok', tokens: 40, tool: 'write_file', text: 'Wrote ~/phd/summaries.md (27,940 chars)' },
+  { role: 'assistant', title: 'Done: 60 summaries saved', tokens: 120, text: '• 60 papers summarized, 3 bullets each\n• Saved to ~/phd/summaries.md\n• 4 PDFs were longer than 100,000 chars; only their first 100,000 were read' },
   { role: 'user', title: 'Plan my trip to PETS 2027 with 3 subagents', tokens: 55, text: 'Plan my trip to PETS 2027 in Lisbon: one subagent finds trains, one hotels near the venue, one the talks I should attend. Then merge it into one plan.' },
   { role: 'assistant', title: 'delegate_task × 3 (parallel)', tokens: 150, tool: 'delegate_task', text: 'tool_call: delegate_task(goal="Trains Karlsruhe → Lisbon around PETS 2027 dates; ≤ 300 words", toolsets=["web"])\ntool_call: delegate_task(goal="Hotels within 1 km of the PETS 2027 venue; ≤ 300 words", toolsets=["web"])\ntool_call: delegate_task(goal="PETS 2027 talks on DP in practice; ≤ 300 words", toolsets=["web"])' },
   { role: 'tool', title: 'delegate_task → trains report (subagent read 31K)', tokens: 520, tool: 'delegate_task', kind: 'subagent', text: '[Subagent report — 520 tokens]\nKarlsruhe → Paris (TGV) → Hendaye → Lisbon: 2 days by rail; or fly FRA–LIS 3 h …\n\n[The subagent read about 31,000 tokens of timetables and pages in ITS OWN window. Only this report entered yours.]' },
   { role: 'tool', title: 'delegate_task → hotels report (subagent read 28K)', tokens: 480, tool: 'delegate_task', kind: 'subagent', text: '[Subagent report — 480 tokens]\n3 hotels within 1 km of the venue …' },
   { role: 'tool', title: 'delegate_task → talks report (subagent read 35K)', tokens: 560, tool: 'delegate_task', kind: 'subagent', text: '[Subagent report — 560 tokens]\nSessions on DP deployment, adversary models …' },
   { role: 'assistant', title: 'Merged trip plan', tokens: 700, text: 'Trip plan: PETS 2027, Lisbon\n• Travel: …\n• Hotel: …\n• Talks: …\n• Budget: …' },
-  { role: 'user', title: 'Add a task; remember I take trains < 8 h', tokens: 40, text: 'Add a task: book the Lisbon trip, due Friday. And remember: I travel by train when it’s under 8 hours.' },
-  { role: 'assistant', title: 'mcp__tasks__create + memory(add)', tokens: 110, tool: 'mcp', text: 'tool_call: mcp__tasks__create(title="Book the Lisbon trip (PETS 2027)", due="2026-10-23")\ntool_call: memory(action="add", target="user", content="Travels by train when the trip is under 8 hours.")' },
-  { role: 'tool', title: 'mcp__tasks__create → created', tokens: 50, tool: 'mcp__tasks__create', text: 'Created task #4821 “Book the Lisbon trip (PETS 2027)”, due 2026-10-23.' },
+  { role: 'user', title: 'Remember: I take trains < 8 h', tokens: 25, text: 'Remember: I travel by train when it’s under 8 hours.' },
+  { role: 'assistant', title: 'memory(add → USER.md)', tokens: 60, tool: 'memory', text: 'tool_call: memory(action="add", target="user", content="Travels by train when the trip is under 8 hours.")' },
   { role: 'tool', title: 'memory → saved (USER.md 584/1,375 chars)', tokens: 30, tool: 'memory', kind: 'memory', memChars: 70, text: 'Write saved. USER.md at 584/1,375 chars.' },
-  { role: 'assistant', title: 'Done: task added, preference saved', tokens: 100, text: '• Task #4821 added, due Friday\n• Saved: trains under 8 h\n• Anything else before your 10:00?' }
+  { role: 'assistant', title: 'Saved', tokens: 40, text: '• Saved: trains under 8 h' }
 ]);
 
 /* =====================================================================
@@ -420,14 +406,14 @@ function pct(n, W) { return Math.round(n / W * 100); }
 
 function prefix(st, memExtraChars, compacted) {
   var userChars = USER_MD_CHARS + (memExtraChars || 0);
-  var rows = [], cats = { system: 0, tools: 0, mcp: 0, rules: 0, skills: 0, memory: 0 }, total = 0;
+  var rows = [], cats = { system: 0, tools: 0, rules: 0, skills: 0, memory: 0 }, total = 0;
   PREFIX_ROWS.forEach(function (r) {
     if (r.onlyCompacted && !compacted) return;
     var t = r.id === 'memory_md' ? Math.ceil((MEMORY_HEADER_CHARS + MEMORY_MD_CHARS) / 4)
           : r.id === 'user_md' ? Math.ceil((USER_HEADER_CHARS + userChars) / 4) : r.tokens;
     rows.push({ id: r.id, row: r, tokens: t }); cats[r.cat] += t; total += t;
   });
-  return { rows: rows, system: cats.system, tools: cats.tools, mcp: cats.mcp, rules: cats.rules, skills: cats.skills, memory: cats.memory, userChars: userChars, total: total };
+  return { rows: rows, system: cats.system, tools: cats.tools, rules: cats.rules, skills: cats.skills, memory: cats.memory, userChars: userChars, total: total };
 }
 
 /* ---------- simulation ---------- */
@@ -505,7 +491,7 @@ function compress(msgs, W, compressionCount, log) {
 }
 
 function simulate(st) {
-  var msgs = [], compactions = [], events = [], memExtra = 0, memSynced = 0, count = 0, ineffective = 0, tripped = false, skipped = null;
+  var msgs = [], compactions = [], events = [], memExtra = 0, memSynced = 0, count = 0, ineffective = 0, tripped = false, trippedStep = -1, skipped = null;
   var thr = thresholdTokens(st.W, st.p);
   for (var i = 0; i <= st.step && i < SCRIPT.length; i++) {
     var src = SCRIPT[i];
@@ -526,7 +512,7 @@ function simulate(st) {
           var still = pre.total + hist >= thr;
           ineffective = still ? ineffective + 1 : 0;   // "ineffective" strikes reset on a successful pass
           events.push({ step: i, cmp: true, text: 'auto-compaction #' + count + ': ' + fmt(info.before) + ' → ' + fmt(info.after) + ' history tokens' + (still ? ' — still over the trigger (ineffective strike ' + ineffective + ')' : '') });
-          if (ineffective >= 2 && !tripped) { tripped = true; events.push({ step: i, cmp: true, text: 'anti-thrash breaker tripped after 2 ineffective compactions' }); }
+          if (ineffective >= 2 && !tripped) { tripped = true; trippedStep = i; events.push({ step: i, cmp: true, text: 'anti-thrash breaker tripped after 2 ineffective compactions' }); }
         } else {
           // Phase-0 size check failed: the protected head and tail cover every row, so nothing can be cut
           skipped = { step: i, prompt: pre.total + hist };
@@ -547,7 +533,7 @@ function simulate(st) {
   var pre2 = prefix(st, memSynced, count > 0);
   var hist2 = msgs.reduce(function (a, m) { return a + m.tokens; }, 0);
   return { msgs: msgs, compactions: compactions, events: events, prefix: pre2, hist: hist2, total: pre2.total + hist2,
-    thr: thr, count: count, memExtra: memExtra, ineffective: ineffective, tripped: tripped, skipped: skipped };
+    thr: thr, count: count, memExtra: memExtra, ineffective: ineffective, tripped: tripped, trippedStep: trippedStep, skipped: skipped };
 }
 
 /* =====================================================================
@@ -556,7 +542,6 @@ function simulate(st) {
 var CATS = {
   system:    { label: 'System prompt',    sw: 'var(--c-system)' },
   tools:     { label: 'Tool definitions', sw: 'var(--c-tools)' },
-  mcp:       { label: 'MCP tools',        sw: 'var(--c-mcp)' },
   rules:     { label: 'AGENTS.md',        sw: 'var(--c-rules)' },
   skills:    { label: 'Skills index',     sw: 'var(--c-skills)' },
   memory:    { label: 'Memory',           sw: 'var(--c-memory)' },
@@ -575,11 +560,12 @@ function tickToStep(t) { return t - BOOT_ROWS.length; }
 function isGateStep(step) { return step >= 0 && step < SCRIPT.length && SCRIPT[step].role === 'user'; }
 function pendingGate() {   // the step the user must "type" before the timeline continues
   var next = tickToStep(ui.tick) + 1;
+  if (ui.sim && ui.sim.tripped) return null;
   if (isGateStep(next)) return { kind: 'prompt', step: next, text: SCRIPT[next].text };
   if (next >= SCRIPT.length && !ui.ended && ui.sim && ui.sim.count === 0) return { kind: 'compress', text: '/compress' };
   return null;
 }
-function atEnd() { return tickToStep(ui.tick) >= SCRIPT.length - 1 && (ui.ended || (ui.sim && ui.sim.count > 0)); }
+function atEnd() { return (ui.sim && ui.sim.tripped) || (tickToStep(ui.tick) >= SCRIPT.length - 1 && (ui.ended || (ui.sim && ui.sim.count > 0))); }
 
 /* ---------- segments: what sits in the window, in order ---------- */
 function msgCat(m) {
@@ -650,7 +636,7 @@ function evRow(seg, label, badge, extraCls) {
   d.addEventListener('click', function () { ui.sel = ui.sel === seg.id ? null : seg.id; render(); });
   return d;
 }
-var TIER_LABEL = { stable: 'system prompt · stable', context: 'system prompt · context', volatile: 'system prompt · volatile', tools: 'tool definitions (the tools parameter)', mcp: 'MCP servers (Part 8)' };
+var TIER_LABEL = { stable: 'system prompt · stable', context: 'system prompt · context', volatile: 'system prompt · volatile', tools: 'tool definitions (the tools parameter)' };
 function phase(txt) { var p = document.createElement('div'); p.className = 'phase'; p.textContent = txt; return p; }
 function renderTimeline(segs) {
   tlEl.innerHTML = '';
@@ -672,7 +658,7 @@ function renderTimeline(segs) {
       prevKind = s.row.tier; return;
     }
     var m = s.msg, kind = m.kind === 'summary' ? 'summary' : m.role;
-    if (kind === 'user' && prevKind !== 'user') tlEl.appendChild(phase(m.kind === 'skillcmd' ? 'You (a skill slash command)' : 'You'));
+    if (kind === 'user' && prevKind !== 'user') tlEl.appendChild(phase('You'));
     else if (kind === 'assistant' && prevKind === 'user') tlEl.appendChild(phase('Hermes works'));
     else if (kind === 'summary') tlEl.appendChild(phase('Summarized by compaction'));
     else if (prevKind === 'summary') tlEl.appendChild(phase('Kept verbatim (protected tail)'));
@@ -688,7 +674,7 @@ function renderTimeline(segs) {
     var btn = document.createElement('button'); btn.className = 'btn primary'; btn.textContent = g.kind === 'compress' ? 'Run ↵' : 'Send ↵';
     btn.addEventListener('click', advance); d.appendChild(btn); tlEl.appendChild(d);
   } else if (atEnd()) {
-    var e = document.createElement('div'); e.className = 'phase'; e.textContent = 'Session complete · ' + (ui.sim.count ? 'compacted ' + ui.sim.count + '×' : 'never compacted') + ' · switch the window above and replay';
+    var e = document.createElement('div'); e.className = 'phase'; e.textContent = ui.sim.tripped ? 'Session stuck · anti-thrash breaker tripped after 2 ineffective compactions · every call now overflows the window · switch the window above and replay' : 'Session complete · ' + (ui.sim.count ? 'compacted ' + ui.sim.count + '×' : 'never compacted') + ' · switch the window above and replay';
     tlEl.appendChild(e);
   }
   if (ui.scrolledTick !== ui.tick) { ui.scrolledTick = ui.tick; tlEl.scrollTop = ui.sim.count && ui.tick === lastCompactTick() ? 0 : tlEl.scrollHeight; }
@@ -711,7 +697,6 @@ function fateText(m) {
   if (z === 'tail') return 'Protected tail: the newest rows, up to ' + fmtK(budget) + ' tokens (2.5% of the window, clamped 10K–25K), survive verbatim, whole tool rounds together, always including the last user message.';
   if (m.role === 'user') return 'At compaction: quoted verbatim into the summary’s “## User Messages” section (up to 4,000 chars per message), so your instructions survive even when the rest is paraphrased.';
   if (m.kind === 'skill') return 'At compaction: cut to a [SKILL_PRUNED: …] marker unless it sits in the protected tail.';
-  if (m.kind === 'skillcmd') return 'At compaction: a user message, so it is quoted verbatim into the summary’s “## User Messages” section, but only the first 4,000 chars. Most of the 20,000-char skill body is gone; Hermes would reload it with skill_view.';
   if (m.kind === 'subagent') return 'At compaction: treated like any tool result. Note the 41,000 tokens the sub-agent read never entered this window at all; only its report did.';
   if (m.role === 'tool') return m.tokens > PRUNE_MIN_TOKENS ? 'At compaction: over 200 chars, so it becomes a 12-token stub before the summarizer even runs. Exact lines survive only if a regex anchor (file paths, #numbers, *Error lines, URLs) catches them.' : 'At compaction: under 200 chars, so it stays as-is until it falls into the summarized middle.';
   return 'At compaction: folded into the structured summary by an auxiliary model. Exact numbers and decisions survive only if the summarizer keeps them.';
@@ -732,6 +717,7 @@ function takeaway() {
   var step = tickToStep(ui.tick), W = state.W;
   if (ui.tick < 0) return 'Nothing is in the window yet. Press Start.';
   var lastC = ui.sim.compactions[ui.sim.compactions.length - 1];
+  if (ui.sim.tripped) return 'Two compactions in a row left the prompt over the trigger: a round of five parallel reads is bigger than this window, and the protected tail keeps whole tool rounds. Hermes’s anti-thrash breaker now switches auto-compaction off, and the provider rejects every call. A 64K window cannot do this job; delegate it or read fewer files per round.';
   if (lastC && lastC.forced && ui.tick === lastCompactTick()) return 'You ran /compress: the same four phases Hermes runs automatically, on demand. Old tool outputs became stubs, the middle became one summary row, the newest rows survived verbatim, and the system prompt was rebuilt: USER.md now includes what the agent saved, and a compaction note was added.';
   if (ui.sim.skipped && ui.sim.total > W) return 'The prompt is now larger than the window. Hermes tried to compact at ' + fmtK(ui.sim.thr) + ' but the protected head (3 rows) and tail (at least 8 rows) covered every row, so there was nothing to cut. A real provider would reject this call; Hermes needs a few more rows before it can fold anything.';
   if (step >= 0 && ui.sim.total >= ui.sim.thr && !(ui.sim.count && ui.tick === lastCompactTick())) return 'The prompt is now past the trigger' + (ui.sim.total > W ? ', even past the window' : '') + ': tool results are appended as they land, and Hermes compacts before the NEXT model call, not when a result arrives. Press Next.';
@@ -740,22 +726,18 @@ function takeaway() {
     var r = BOOT_ROWS[ui.tick];
     if (r.tier === 'stable') return 'Hermes builds the system prompt once per session in three parts it calls stable, context and volatile. Stable comes first: SOUL.md (who the agent is), then guidance text. Two of these blocks exist only because the model is DeepSeek-class.';
     if (r.tier === 'context') return 'Context holds whatever the working directory contributes: your AGENTS.md of standing instructions, and the platform hint. In a code project this part would also carry Hermes’s coding brief and a git snapshot.';
-    if (r.tier === 'volatile') return 'Volatile comes last so the stable part stays cacheable: the skills index, MEMORY.md and USER.md (frozen snapshots), the profile line, the date and the runtime environment. This is where Part 4’s memory files live.';
-    if (r.tier === 'tools') return 'Tool schemas are not prompt text; they travel in the request’s tools parameter. They are the biggest fixed cost, about two thirds of everything sent before your first word, and the browser toolset alone is bigger than the whole system prompt.';
-    return 'An MCP server’s tools are advertised like any other, prefixed mcp__&lt;server&gt;__&lt;tool&gt;. Every server you add costs its schemas on every call, which is why Part 8 keeps only the read tools.';
+    if (r.tier === 'volatile') return 'Volatile comes last so the stable part stays cacheable: the skills index, MEMORY.md and USER.md (frozen snapshots), the profile line, the date and the runtime environment. This is where the memory files live.';
+    return 'Tool schemas are not prompt text; they travel in the request’s tools parameter. They are the biggest fixed cost, about two thirds of everything sent before your first word, and the browser toolset alone is bigger than the whole system prompt.';
   }
   if (step === 0) return 'Your first message is tiny: ' + fmtK(ui.sim.prefix.total) + ' tokens were already in the window before it. Most of what the model reads is setup, not your words.';
   var src = SCRIPT[step];
   if (src.kind === 'memory') return 'Hermes saved a memory, but to disk (~/.hermes/memories/USER.md). The USER.md row above was rendered at session start, so the window sees this note only after the prompt is rebuilt: at the next compaction, or after /new.';
-  if (src.kind === 'subagent') return 'Each subagent read about 30K tokens of pages in its own window. Only its report (about 500 tokens) entered this one. Delegation is how an agent keeps large reads out of its context (Part 6).';
-  if (src.kind === 'skill') return 'A skill’s full SKILL.md enters the window only when Hermes calls skill_view. The index in the system prompt is just names and one-liners (Part 5).';
-  if (src.kind === 'skillcmd') return 'A skill slash command (/llm-wiki …) pastes the whole SKILL.md into your user message: 20,000 chars you never see. Skills are procedures, and procedures are long.';
+  if (src.kind === 'subagent') return 'Each subagent read about 30K tokens of pages in its own window. Only its report (about 500 tokens) entered this one. Delegation is how an agent keeps large reads out of its context.';
   if (src.batch && src.tool === 'read_file') return 'Batch work fills the window fastest: five parallel read_file calls land up to 125K tokens in one round, re-sent on every call from then on. This is the request that reaches even a 1M trigger.';
-  if (src.batch && src.tool === 'write_file') return 'The wiki pages are on disk now. That is llm-wiki’s point (Part 5): compile once; the context may forget the paper text, the wiki keeps the knowledge.';
-  if (src.tool === 'mcp' || /^mcp__/.test(src.tool || '')) return 'MCP tool calls look like any other tool call to the model. The calendar result is personal data from colleagues, which is why Part 8 insists on KIT’s local models.';
+  if (src.batch && src.role === 'assistant' && !src.tool) return 'The summaries are small; it is the reads that fill the window, and they stay in it after the summary is written.';
   if (atEnd() && !ui.sim.count) return 'At ' + fmtK(W) + ' the trigger is ' + fmtK(ui.sim.thr) + ' tokens and this day never reached it.';
   if (atEnd() && lastC && lastC.forced) return 'Session over: auto-compaction never fired at ' + fmtK(W) + ' (trigger ' + fmtK(ui.sim.thr) + '); your /compress did the same work on demand. Cap the window at 128K and replay to watch it fire by itself.';
-  if (atEnd()) return 'Session over: Hermes compacted ' + ui.sim.count + '× under a ' + fmtK(W) + ' window, all of it during the 60-paper ingest. Switch the window above and replay: at 1M it compacts twice, capped at 128K fifteen times.';
+  if (atEnd()) return 'Session over: Hermes compacted ' + ui.sim.count + '× under a ' + fmtK(W) + ' window, all of it during the 60-paper summary. Switch the window above and replay.';
   if (src.role === 'tool' && src.tokens >= 9000) return 'Tool results dominate. Each one lands in the window and stays there, re-sent on every call. Hermes caps a single read_file or web_extract at 100,000 chars and terminal output at 50,000.';
   if (src.role === 'user') return 'A new request adds to the same window. Everything from earlier today is still in it, and still re-sent.';
   return 'Every call re-sends the whole window: prefix plus the full history so far. Hover a row to see where it sits.';
@@ -776,7 +758,7 @@ function renderDetail(segs) {
   html += '<div class="box take"><div class="k">Key point</div>' + takeaway() + '</div>';
   detailEl.innerHTML = html;
 }
-var SUMMARY_PREVIEW = '[CONTEXT COMPACTION — REFERENCE ONLY]\nThe following is an automated summary of earlier conversation that was compressed to save context space. Treat it as background reference only.\n\n## Task\nPersonal-assistant day: DP news, user’s arXiv papers (2405.00267, 2405.01716), /llm-wiki ingest of ~/phd/reading (60 PDFs) into ~/wiki, in progress …\n## Key Decisions\n…\n## Anchor Index (mechanically extracted, exact)\n~/phd/reading/p01.txt … ~/wiki/sources/p25.md · https://csrc.nist.gov/pubs/sp/800/226/final …\n## User Messages (verbatim, newest first)\n…\n## Context Recovery\nFull transcript remains searchable via session_search(…)\n--- END OF CONTEXT SUMMARY ---';
+var SUMMARY_PREVIEW = '[CONTEXT COMPACTION — REFERENCE ONLY]\nThe following is an automated summary of earlier conversation that was compressed to save context space. Treat it as background reference only.\n\n## Task\nPersonal-assistant day: DP news this week; summarizing the 60 PDFs in ~/phd/reading, 3 bullets each, to ~/phd/summaries.md (in progress) …\n## Key Decisions\n…\n## Anchor Index (mechanically extracted, exact)\n~/phd/reading/p01.txt … p25.txt · https://csrc.nist.gov/pubs/sp/800/226/final …\n## User Messages (verbatim, newest first)\n…\n## Context Recovery\nFull transcript remains searchable via session_search(…)\n--- END OF CONTEXT SUMMARY ---';
 
 /* ---------- readout + controls ---------- */
 var roBig = document.getElementById('roBig'), roSub = document.getElementById('roSub'), statusEl = document.getElementById('status');
@@ -786,6 +768,7 @@ function render() {
   state.step = Math.min(SCRIPT.length - 1, tickToStep(ui.tick));
   state.finalCompress = ui.ended;
   ui.sim = simulate(state);
+  if (ui.sim.tripped) { var tripTick = ui.sim.trippedStep - 1 + BOOT_ROWS.length; if (ui.tick > tripTick) { ui.tick = tripTick; state.step = tickToStep(ui.tick); ui.sim = simulate(state); } }
   var segs = segments(), used = visibleTokens(segs), W = state.W, p = Math.round(used / W * 100);
   var cls = p >= 95 ? 'critical' : p > 80 ? 'bad' : p >= 50 ? 'warn' : 'good';
   roBig.className = 'big ' + cls; roBig.innerHTML = fmt(used) + '<small>tokens</small>';
